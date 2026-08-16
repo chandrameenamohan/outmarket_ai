@@ -12,9 +12,11 @@ A duplicated literal tests that two copies of a typo agree.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
-from conftest import pending
+from conftest import REPO, pending
 
 CATALOG_SIZE = 15  # SPEC O-1, resolved by LT-2a: single-column + table-level, zero multi-column
 
@@ -72,3 +74,28 @@ def test_catalog_excludes_every_multi_column_expectation() -> None:
 def test_shared_copy_module_owns_the_constant_strings() -> None:
     """The F11 caveat sentence and the neutral compile token have exactly one home."""
     pending("needs the shared copy module")
+
+
+def test_spec_quotes_the_seeded_row_count_and_not_the_retired_one() -> None:
+    """Same drift argument, one layer up: SPEC's row count is a second copy of the seed's.
+
+    `seed/MANIFEST.md` is generated from the seeder's own constants, so it is the
+    fact; every row count in SPEC.md is a hand-copied duplicate of it. SPEC quoted
+    2,400,000 until the seed settled at 500,000 — a factual error, not a wording
+    preference, and the kind that comes back the next time an old paragraph is
+    pasted forward. This is the only prose check in the harness on purpose: the
+    other three B24 proposed police wording ("inside" vs "adjacent"), which the
+    tests themselves already assert behaviourally, and VERIFICATION §10 is about
+    what a fourth copy of the verification intent costs.
+
+    ponytail: greps two documents. It does not read the SPEC — it cannot tell you
+    the row count is used sensibly, only that both files name the same number.
+    """
+    manifest = (REPO / "seed" / "MANIFEST.md").read_text()
+    spec = (REPO / "SPEC.md").read_text()
+
+    seeded = re.search(r"\|\s*`orders`\s*\|\s*([\d,]+)\s*\|", manifest)
+    assert seeded, "seed/MANIFEST.md no longer states an `orders` row count in its scale table"
+    rows = seeded.group(1)
+
+    assert rows in spec, f"seed plants {rows} `orders` rows; SPEC.md quotes that number nowhere"
