@@ -24,3 +24,17 @@ logs/
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# tool caches (added with the gate)
+.ruff_cache/
+.mypy_cache/
+
+# visual regression: baselines ARE committed, actual/diff output is not
+tests/e2e/__baselines__/*.actual.png
+tests/e2e/__baselines__/*.diff.png
+
+# agent worktrees — never commit another session's in-flight work
+.claude/worktrees/
+
+# beads: passive export of the Dolt DB — stale the moment the DB moves
+.beads/issues.jsonl

@@ -75,20 +75,43 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+./init.sh      # boot the dev environment + smoke test (fails loudly if .env is missing)
+make check     # THE GATE: lint -> format -> typecheck -> unit. Must exit 0.
+make check-ui  # browser layer; needs a running app at $APP_URL
 ```
+
+`make check` exits 0 today with most checks reported as loud `PENDING —` skips, one per
+unbuilt thing. That is the honest state, not a false green: `tests/test_code_quality_thresholds.py`
+walks every test with `ast` and **fails the gate** on a test that asserts nothing, or on any
+skip route other than `pending()`. Read [`VERIFICATION.md`](./VERIFICATION.md) before touching
+the gate. Do not weaken, delete, or skip a check to make it pass.
+
+The Great Expectations layer is not a make target (it resolves ~40 packages from the network);
+its command is recorded in VERIFICATION.md §1.
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+A domain expert states an expectation in plain English; the system compiles it into a Great
+Expectations check it has already proven will run, executes it against a PostgreSQL table on
+Supabase, and reports failures in that same language. See [`SPEC.md`](./SPEC.md) for the 15
+features and the end-to-end scenario.
+
+Invariants that hold from the first commit and are enforced by the gate, not by convention:
+
+| ID | Invariant | Enforced by |
+|---|---|---|
+| INV-2 | An invalid or hallucinated expectation can never reach the rule store — rejected at **authoring** time, not at execution | `tests/test_inv2_authoring_rejection.py` |
+| INV-3 | Great Expectations is a runtime, not the domain model. **Exactly one module imports it** | `tests/test_inv3_single_ge_import.py` |
+| INV-5 | Any result derived from a sample says so, adjacent to the pass/fail state | `tests/test_inv5_sampling_disclosure.py` |
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Never commit to `main`.** Branch per unit of work, one commit per bead with the bead ID in
+  the subject, then `gh pr create` — the author reviews and merges. Details in HANDOFF.md §4a.
+- Task tracking is `bd` (beads). `br` is **not** installed on this machine; ignore any guidance
+  that references it.
+- Python is run through `uv`; `.env` is gitignored and read by `init.sh` and the scripts directly.
+- Start minimal (INV-6): deepen only the dimension that evidence shows is weak.
 
 <!-- ox:prime --> Run SageOx `ox agent prime` on session start, after compaction, or clear. (DO NOT REMOVE)
