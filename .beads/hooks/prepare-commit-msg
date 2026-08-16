@@ -31,3 +31,10 @@ if command -v bd >/dev/null 2>&1; then
   if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
 fi
 # --- END BEADS INTEGRATION v1.2.2 ---
+
+# ox prepare-commit-msg hook
+# appends configured trailers (Co-Authored-By, SageOx-Session) to commits
+if command -v ox >/dev/null 2>&1; then
+  ox hooks commit-msg --msg-file "$1" --source "${2:-}" 2>/dev/null || true
+fi
+# end ox hook
