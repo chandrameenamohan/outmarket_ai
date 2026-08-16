@@ -81,41 +81,57 @@ class Driver:
         return self.page.goto(self.base_url.rstrip("/") + route)
 
 
-@pytest.fixture
-def driver(app_url: str) -> Iterator[Driver]:
-    """Chromium pointed at the RUNNING app.
+@pytest.fixture(scope="session")
+def chromium(app_url: str) -> Iterator[Any]:
+    """One headless Chromium per session. Never launches when `app_url` pends first.
 
     Python playwright 1.57.0 is already installed and the chromium builds are
     already in the shared cache, so this needs no `pip install` and no
-    `playwright install`. It never launches today: `app_url` pends first when
-    APP_URL is unset, which is the whole point — no browser check may run
-    against a stub.
+    `playwright install`.
 
-    Fresh context per test, so F14's "no cookies, no prior navigation"
-    requirement is the default rather than a special case.
+    Session-scoped because the isolation boundary a browser check needs is the
+    CONTEXT — cookies, storage, permissions — not the process. Launching a
+    process per test cost about a second each across ~43 checks and bought
+    nothing.
     """
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        context = browser.new_context()
-        drv = Driver(page=context.new_page(), base_url=app_url)
-
-        def on_console(msg: Any) -> None:
-            if msg.type == "error":
-                drv.console_errors.append(msg.text)
-
-        drv.page.on("console", on_console)
-        drv.page.on("pageerror", lambda e: drv.console_errors.append(str(e)))
-        drv.page.on("requestfailed", lambda r: drv.failed_requests.append(r.url))
-        yield drv
-        context.close()
+        yield browser
         browser.close()
 
 
+@pytest.fixture
+def driver(chromium: Any, app_url: str) -> Iterator[Driver]:
+    """A page in a fresh context, pointed at the RUNNING app.
+
+    Fresh context per test, so F14's "no cookies, no prior navigation"
+    requirement is the default rather than a special case.
+
+    The three recorders are wired BEFORE the fixture yields, which is the only
+    moment that works: they are attached to a page that has not navigated
+    anywhere, so an error thrown during the first paint of the first navigation
+    is recorded. Wire them after a `goto` and `test_console_is_clean` becomes
+    blind to exactly the class of bug it exists to catch.
+    """
+    context = chromium.new_context()
+    drv = Driver(page=context.new_page(), base_url=app_url)
+
+    def on_console(msg: Any) -> None:
+        if msg.type == "error":
+            drv.console_errors.append(msg.text)
+
+    drv.page.on("console", on_console)
+    drv.page.on("pageerror", lambda e: drv.console_errors.append(str(e)))
+    drv.page.on("requestfailed", lambda r: drv.failed_requests.append(r.url))
+    yield drv
+    context.close()
+
+
 def source_files(*subdirs: str) -> list[pathlib.Path]:
-    """Every gate-scoped Python file. learning-tests/ and seed/ are out of scope
-    (one-shot empirical scripts — see pyproject.toml for why)."""
+    """Every gate-scoped Python source file. learning-tests/ and seed/ are out of
+    scope (one-shot empirical scripts — see pyproject.toml for why)."""
     out: list[pathlib.Path] = []
     for d in subdirs:
         root = REPO / d

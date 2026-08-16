@@ -1,6 +1,7 @@
 # SPEC — AI-Powered Data Quality Assistant
 
-**Status:** Rev 0.2 · **FROZEN** 2026-08-16 · pre-implementation
+**Status:** Rev 0.3 · **FROZEN** 2026-08-16 · pre-implementation
+**Changed in 0.3 (2026-08-16, still pre-implementation):** two acceptance passages only, both saying out loud what O-2 had already settled — F8's *sampling disclosure* clause (the cap ships **off**; the marker still ships, and every result declares which of the two it is) and §7 scenario step 7 (the status token carries no sampling clause because no cap engaged). §8's contingency paragraph records that LT-1b triggered it only halfway. No feature, invariant or non-goal changed. A freeze that quietly absorbs acceptance edits is worth less than no freeze, so the edits took a rev instead of hiding under 0.2.
 **Companion:** [Architecture design document](https://claude.ai/code/artifact/97a3df0c-7ae3-4e8a-94fe-6e23e8b6f0f9) — problem framing, designs not chosen, risk register
 **Frozen on:** All four learning tests (LT-1a, LT-1b, LT-2a, LT-2b) have been executed against real dependencies and recorded in `learning-tests/FINDINGS.md` — see §8. Nothing in this spec is waiting on a measurement. One implementation choice remains open — **O-4**, the transport for progressive results — which changes no acceptance text and is decided when F8 and F13 are built.
 
@@ -132,7 +133,9 @@ Accepted rules run against live data on explicit user action.
 
 *Note — the measured cost, which is context and not a criterion:* against the seeded 500,000-row `orders` table on the direct connection, one rule over the whole table costs 2.28 s and the full fifteen-rule catalog 13.97 s. Averaged over that range the shape is a ~2.3 s floor plus ~0.83 s per rule, **but the average is not an acceptance-grade number** — the real cost is per-rule and lumpy: a single rule measures anywhere from 1.28 s to 6.59 s, and `be_unique` on an unindexed `text` column alone costs 6.59 s. That is why the ten-rule suite F13 actually needs — `unexpected_index_column_names`, for identifier-plus-value display — costs **more** (14.84 s) than the fifteen-rule catalog (13.97 s): fewer rules costing more is not a typo, because the ten-rule suite substitutes two aggregate expectations for the two type expectations, and one dear rule sets the price. Rule count is not what sets the cost, and neither is row count. It also means the first verdict's timing depends on which rule lands first.
 
-*Acceptance — sampling disclosure:* If a row cap engages, the run is marked as sampled and every result derived from it carries that marker through to the UI. Great Expectations does not record that a batch was capped (LT-1a), so the marker is carried by us, from the asset definition into the stored result. The mechanism ships; at this scale the cap itself is switched off. *(INV-5)*
+*Acceptance — sampling disclosure:* **No cap ships at this scale (O-2)**, so every run is marked not-sampled and no sampling clause reaches the UI. The mechanism ships anyway, because the marker cannot be recovered after the fact: Great Expectations does not record that a batch was capped (LT-1a), so we carry it ourselves — set from the asset definition, never inferred from GE's output — and **every result declares which of the two it is**. Switching a cap on later is a value change, not a new feature; a sampled run then says so inside the status token. *(INV-5)*
+
+*Contingency — **partially triggered**, and resolved here:* Rev 0.1 made the synchronous model conditional on the LT-1 measurement, and said that if interactive execution proved infeasible the feature would change shape, with the spec revised before implementation rather than during. LT-1b triggered half of that. The feature does **not** change shape — it is not a job system — but a blank spinner for 14 s stopped being an option, so the acceptance above gained the progressive clause and F13 gained a partially-complete run. That is the revision, made before implementation. Nothing further is contingent on a measurement. (`FINDINGS.md` §LT-1b; VERIFICATION §9.1.)
 
 ---
 
@@ -301,7 +304,7 @@ Five smaller items in the same category:
 >
 > **6 — An impossible rule fails honestly.** They then type *"shipped date must be after order date"*. The system rejects it with an explanation naming the limitation. Nothing is stored, and coverage does not change.
 >
-> **7 — Execution finds the planted defect.** The engineer runs the suite. The first verdict appears well before the last and the rest fill in one by one — never a blank spinner — rules not yet reported showing as pending throughout. The `order_total` rule fails, reporting exactly the number of negative-total rows the seed script planted, with real offending order IDs and values shown in business language. If sampling was applied, the result says so **inside** the status token.
+> **7 — Execution finds the planted defect.** The engineer runs the suite. The first verdict appears well before the last and the rest fill in one by one — never a blank spinner — rules not yet reported showing as pending throughout. The `order_total` rule fails, reporting exactly the number of negative-total rows the seed script planted, with real offending order IDs and values shown in business language. The status token carries no sampling clause, because no cap engaged (O-2) — and the token is where such a clause would appear, **inside** it rather than beside it.
 >
 > **8 — The loop closes.** The result is cached and renders immediately on reload. Re-running produces the same outcome. The Table Explorer now shows `orders` with a non-zero rule count and a failing last run.
 

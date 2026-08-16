@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Boot the dev environment and smoke test it: credentials → database → gate.
-# Idempotent: installs nothing, creates nothing, safe to run on every session start.
+# Boot the dev environment and smoke test it: credentials → database → app build → gate.
+# Idempotent and safe to run on every session start. It installs and builds the Next
+# app, because that is the one thing a fresh clone cannot do for itself and the gate
+# now depends on — `npm install` and `next build` are both no-op-shaped once warm.
 #
 #   ./init.sh
 #
@@ -73,10 +75,40 @@ print(f"   ok   {ver}  ·  {', '.join(TABLES)} present")
 PY
 
 # ---------------------------------------------------------------------------
+say "build: app"
+# ---------------------------------------------------------------------------
+# The Next app is in web/, NOT app/. `app/` is the Python package the gate lints
+# (Makefile SRC, VERIFICATION.md §3) — pointing mypy at a TypeScript tree would
+# only teach people to narrow SRC. Both toolchains stay in their own language.
+#
+# Idempotent by npm's own design: with the committed package-lock.json and a warm
+# node_modules this is a sub-second no-op, and on a fresh clone it is the install.
+npm --prefix web install --no-audit --no-fund --silent \
+  || die "npm install failed in web/ (see error above)"
+ok "web/node_modules"
+
+# The browser layer screenshots and diffs this app (VERIFICATION.md §4.3), so it
+# drives the PRODUCTION build — a dev server paints a different page. Turbopack
+# reuses web/.next/cache, so a rebuild with nothing changed is a few seconds.
+#
+# This script does NOT boot the app to prove it serves. That was 22 lines buying a
+# fact already bought twice: `next build` prerenders all seven routes, so a page
+# that throws fails one step earlier, right here; and conftest's `app_url` fixture
+# FAILS — never skips — when APP_URL has nothing answering, at the only moment it
+# matters. Worse, the version that reused whatever was already on the port proved
+# liveness and not identity: a stale `next start` holding 3000 from an older build
+# satisfied it, and the whole browser layer went green against an artifact no
+# longer on disk. A boot script must not print `ok` for a process it cannot name.
+npm --prefix web run build --silent \
+  || die "next build failed (see error above)"
+ok "web/.next"
+
+# ---------------------------------------------------------------------------
 say "gate"
 # ---------------------------------------------------------------------------
 # No toolchain preflight: `make check` reports a missing tool itself, two seconds
 # from now, and it cannot drift out of date the way a hand-listed loop does.
 make check
 
-printf '\n\033[1mready.\033[0m  next: bd ready\n\n'
+printf '\n\033[1mready.\033[0m  next: bd ready'
+printf '\n         run the app: npm --prefix web run start   then: make check-ui\n\n'

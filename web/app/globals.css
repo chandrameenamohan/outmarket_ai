@@ -1,0 +1,48 @@
+/* The shell's entire stylesheet. It exists to make the hygiene checks meaningful,
+   not to be a design system: F10-F13 bring their own styling with the screens.
+
+   ponytail: one light palette, no `prefers-color-scheme` block. Ceiling — a dark
+   variant doubles every visual-regression baseline (VERIFICATION.md §4.3) for a
+   shell with no design yet. Add it with the design, and re-approve the baselines
+   once, deliberately.
+
+   ponytail: system font stack, no `next/font`. Ceiling — `next/font/google`
+   downloads Geist at BUILD time, which would make `npm run build` need the
+   network. init.sh promises the opposite. A self-hosted font goes in with the
+   design, as a file in the repo. */
+
+:root {
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #595959; /* 7.0:1 on white — above WCAG AA for body text */
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+}

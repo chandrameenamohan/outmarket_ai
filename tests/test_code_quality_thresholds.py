@@ -71,9 +71,14 @@ def _parsed_tests() -> list[tuple[pathlib.Path, ast.AST]]:
 
 
 def test_no_source_file_exceeds_the_size_threshold() -> None:
+    """Covers the TypeScript side too. "This file is doing two jobs" is a craft
+    threshold, not a Python one, and a 900-line `page.tsx` would otherwise walk
+    straight past the only signal that catches it — eslint has no file-size rule
+    either. `web/app` is the route tree, and holds no node_modules."""
+    files = source_files("app", "tests") + list((REPO / "web/app").rglob("*.tsx"))
     oversized = [
         (p.relative_to(REPO), n)
-        for p in source_files("app", "tests")
+        for p in files
         if (n := len(p.read_text().splitlines())) > MAX_LINES
     ]
     assert not oversized, f"files over {MAX_LINES} lines: {oversized}"

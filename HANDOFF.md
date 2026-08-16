@@ -2,8 +2,11 @@
 
 **Read this first.** It exists so a fresh session can resume without re-deriving anything.
 
-Last updated: 2026-08-16 · after the SPEC was frozen, the verification harness was built, and the
-spec was decomposed into beads. **No application code exists yet** — `app/` is not there.
+Last updated: 2026-08-16 · after the SPEC was frozen, the verification harness was built, the spec
+was decomposed into beads, and the first half of B1 put a bootable Next shell in `web/`.
+**The Python package `app/` still does not exist**; `web/` is the Next application and holds no
+SPEC feature — seven routes, each rendering a heading that says which feature owns it and that the
+feature is unbuilt.
 
 ---
 
@@ -29,19 +32,23 @@ gate it depends on is kept; the loop driver is replaced by attended, one-task-at
 | 0 | Sharpen | ✅ |
 | 0.25 | Scope — FULL pack, MVP feature ceiling | ✅ |
 | 0.5 | Challenge | ✅ |
-| 1 | SPEC | ✅ `SPEC.md` Rev 0.2 **FROZEN** 2026-08-16 — nothing waits on a measurement; only O-4 (progressive transport) is open, and it changes no acceptance text |
+| 1 | SPEC | ✅ `SPEC.md` Rev 0.3 **FROZEN** 2026-08-16 — nothing waits on a measurement; only O-4 (progressive transport) is open, and it changes no acceptance text |
 | 1.5 | Out-of-the-box expansion | ✅ one candidate surfaced, argued against, declined |
 | 2 | Learning tests | ✅ **4 of 4 executed** against real dependencies → `learning-tests/FINDINGS.md` (PRs #2, #4, #5, #7) |
 | 3 | Tasks + DoD | ✅ **6 epics + 25 task beads**, all open, none claimed → `bd list` |
 | 4 & 6 | Verification gate | ✅ **built and green** → `VERIFICATION.md`, `Makefile`, `init.sh`, `pyproject.toml`, `tests/` |
-| 5 | Build (attended) | ⬜ **not started — this is where the next session works** |
+| 5 | Build (attended) | 🟨 **started.** `dq-5pb.1` (B1) first half landed: `web/` is a Next 16 App Router shell that `./init.sh` installs, builds and boots, `make check` grew a fifth layer (`check-js`), and `make check-ui` now runs against a real server instead of pending on `APP_URL`. Second half landed too: the browser layer is wired — axe vendored, console/CLS/axe real on all seven routes, 3 hygiene checks over 7 routes (21 cases) in `make check-ui`. The Step-6 demonstration is **done**: one missing image in `unbuilt.tsx` turned `make check-ui` red at 14 failed / 7 passed (console-clean *and* axe, on all seven routes), then was restored to 21 green — recorded in `VERIFICATION.md` §4.2. **B1 is still open on one thing only:** whether deferring the eight visual-regression baselines to the first real-screen bead (F10–F13) is accepted — a human call, not a check |
 | 7.5 | Craft review | ⬜ |
 | 9 | Provenance | ⬜ the AI-usage write-up is still unwritten — see §9 |
 
 Also landed outside the step ladder: the 500,000-row demo dataset (PR #3, `seed/MANIFEST.md`, live in
 Supabase) and four UX design variants with judge scores (PR #6, `design/`).
 
-**`make check` today:** exit 0 — 6 passed, 28 skipped, 46 deselected. Every skip prints a loud
+**`make check` today:** exit 0 in ~6 s — 7 passed, 28 skipped, 52 deselected, then eslint and
+`tsc --noEmit` clean over `web/`. It now needs `web/node_modules`, which `./init.sh` installs.
+**`make check-ui` today:** exit 0 in ~22 s — **21 passed, 28 skipped**, against a real running
+server (`npm --prefix web run start`). The 21 are **3 hygiene checks over 7 routes** — console-clean,
+layout-shift and axe — so 21 cases, not 21 independent facts; one chromium is launched per session and one context per test. Every skip prints a loud
 `PENDING — <what it is waiting on>`. That skip list *is* the ledger of remaining work; there is no
 feature-ledger file, deliberately (`VERIFICATION.md` §10).
 
@@ -83,10 +90,18 @@ bd ready
   tree already*: `SPEC.md` is frozen and its §9 records O-1/O-2/O-3 resolved, `VERIFICATION.md` §9 is
   written as "SETTLED BY LT-1b", and this rewrite is the HANDOFF half of it. What remains is
   verifying its checks and getting it onto a branch and into a PR. Documents only, no app code.
-- **`dq-5pb.1` · B1 — the gate reaches the browser layer, and is shown once to go red.** This is the
-  first build task: a Node/Next app that boots from `./init.sh`, answers on `APP_URL`, and lets
-  `make check-ui` run `tests/e2e/` against something real instead of skipping. Then break one check
-  on purpose, watch the gate go red, restore it (workflow Step 6).
+- **`dq-5pb.1` · B1 — the gate reaches the browser layer, and is shown once to go red.**
+  *First half done:* `web/` boots from `./init.sh` and answers on `APP_URL`, so `make check-ui`
+  runs `tests/e2e/` against a real server. *Second half done:* axe-core 4.13.0 vendored at
+  `tests/e2e/axe.min.js`, the three hygiene checks (console, CLS, axe) are real over all seven
+  routes, visual regression pends per state on evidence read off the running app (its Pillow diff was
+  written, proven, then removed — unreachable while all eight states pend, and its module-level
+  import made Pillow an undeclared dependency of `make check`), and `driver` is lazy — session browser, per-test context, 49 checks in 22 s. *Done since:* the
+  break-red-restore demonstration (`VERIFICATION.md` §4.2), plus two adjacent contracts re-proven —
+  `APP_URL` at a dead port errors 49 checks rather than skipping, and a cold checkout with no
+  `web/node_modules` boots through `./init.sh` in 23.6 s and serves the same 21 green. *Still open:*
+  a human ratifying that the eight visual-regression baselines belong to the first bead that ships a
+  real screen (`VERIFICATION.md` §4.3) rather than to B1 — nobody has ever compared a screenshot here.
 
 After B1, E1's remaining P0s (`dq-5pb.2`, `.3`, `.4`) and then epic E2 (`dq-yov`, the GE door +
 catalog + store) are the spine. `VERIFICATION.md` §9.4 lists what is buildable immediately regardless
