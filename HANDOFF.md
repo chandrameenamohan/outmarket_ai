@@ -73,7 +73,17 @@ Use **~500K orders rows, not 2.4M** — the Supabase free tier is 500MB and 500K
 
 ---
 
-## 4a. Commit discipline — one bead, one commit
+## 4a. Git discipline — branch, one commit per bead, PR
+
+**Never commit to `main`.** Every unit of work gets its own branch, named for what it is:
+
+```
+learning-tests/lt2a-ge-registry
+seed/demo-dataset
+```
+
+Branch off the last commit that exists on `origin/main`, not off other local work — that keeps
+PRs independent wherever the files don't overlap, so they can be merged in any order.
 
 **Each completed bead gets its own commit. Never batch several beads into one.**
 
@@ -86,6 +96,10 @@ LT-2a: confirm GE 1.x object model and expectation registry (dq-chf)
 Work that is not a bead — setup, docs, spec revisions — still gets its own focused commit
 rather than being folded into a bead's. A commit spanning several beads cannot be reverted
 without taking unrelated work with it.
+
+**Then push the branch and open a PR with `gh pr create`. Do not merge it** — the author
+reviews and merges. Put the finding in the PR body, not only in the bead notes: a learning
+test's *result* is the deliverable, and it should be readable without opening the tracker.
 
 ---
 
