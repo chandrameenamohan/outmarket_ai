@@ -59,6 +59,11 @@ disallow_untyped_defs = false
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repo root on sys.path, so `from app import model` resolves under a bare
+# `pytest` as well as under `python -m pytest`. Without it only the latter works
+# (it puts CWD on the path; pytest's own prepend mode adds tests/, not the root)
+# and the gate would pass or fail depending on how it was invoked.
+pythonpath = ["."]
 # -ra prints the reason for every skip: that is how a PENDING check stays visible
 # instead of disappearing into a green dot.
 # --strict-markers turns a mistyped marker into a collection error instead of a
@@ -67,8 +72,9 @@ testpaths = ["tests"]
 # breaking the three promises in the Makefile header, silently.
 addopts = "-ra --strict-markers"
 markers = [
-    "ge: needs great_expectations AND a reachable database — never part of `make check`; run via the `uv run` line in VERIFICATION.md §1",
+    "ge: needs a reachable database and (for all but the F15 seed checks) great_expectations — never part of `make check`; run via the `uv run` line in VERIFICATION.md §1",
     "e2e: drives the running app with a browser — needs APP_URL",
+    "live: makes a real, billed call to the model — never part of `make check`; run via the command in tests/test_model_sandbox.py",
 ]
 # `blocked_lt1b` is gone: LT-1b landed and every check it gated is now designed
 # (VERIFICATION.md §9). A marker for a resolved blocker is a place for a stub to hide.

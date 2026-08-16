@@ -1,11 +1,20 @@
 # VERIFICATION — the back-pressure harness
 
 **Status:** designed and scaffolded · Step 4 of `software_development_workflow.md`
-**Runs today:** `make check` exits 0 with **7 real assertions passing and 28 loud `PENDING` skips**
-(52 deselected — 49 browser checks and 3 GE checks, which belong to the layers below).
-**`make check-ui` runs those 49 against the booted app in 22 s: 3 hygiene checks over 7 routes
-(21 cases) and 28 `PENDING`** — console-clean, layout stability and accessibility are real on all
-seven routes (§4.2, §4.4, §4.5); everything waiting on rules, runs or results still pends by name.
+**Runs today** (all four re-measured 2026-08-17, after the craft pass): `make check` exits 0 with
+**85 real assertions passing and 4 loud `PENDING` skips** in 0.53 s (68 deselected — 49 browser
+checks, 18 GE checks and 1 billed model call, which belong to the layers below). The four markers
+partition all **157** collected checks with no overlap: 89 default + 18 `ge` + 49 `e2e` + 1 `live`.
+**`make check-ge` runs those 18 against the real seeded database: 18 passed, 139 deselected, 38.03 s
+— 0 `PENDING`, the GE layer has no stubs left.** INV-2's authoring gate (`app/rules/validator.py`,
+bead `dq-yov.4`) is what turned 16 of those skips into assertions: every shipped invalid-rule probe
+is now refused before persistence — all 10 the framework alone accepts, plus one probe for each of
+the four rejection classes it does catch.
+**`make check-ui` runs those 49 against the booted app: 21 passed, 28 skipped, 108 deselected,
+22.29 s** — 3 hygiene checks over 7 routes (21 cases): console-clean, layout stability and
+accessibility are real on all seven routes (§4.2, §4.4, §4.5); everything waiting on rules, runs or
+results still pends by name. **`pytest -m live`: 1 passed, 156 deselected, 5.03 s** — one real
+billed call.
 **Nothing in this harness is blocked on a learning test any more.** LT-1b (bead `dq-e1d`) landed and
 settled SPEC **O-2** and **O-3**; §9 records what it settled and what each settled thing now checks.
 
@@ -36,12 +45,12 @@ Composes five layers, in the order that fails cheapest first:
 | 1 | lint | `ruff check $(SRC)` | ruff 0.6.1 | yes |
 | 2 | format | `ruff format --check $(SRC)` | ruff 0.6.1 | yes |
 | 3 | typecheck | `mypy $(SRC)` | mypy 1.19.1 | yes |
-| 4 | tests | `python3 -m pytest -m "not ge and not e2e"` | pytest 7.4.3 | yes |
+| 4 | tests | `python3 -m pytest -m "not ge and not e2e and not live"` | pytest 7.4.3 | yes |
 | 5 | js lint + typecheck | `npm --prefix web run check` | eslint 9 + tsc 5 (`eslint-config-next` 16.3.1) | yes, in `web/node_modules` — `./init.sh` installs it |
 
-`SRC = $(wildcard app) tests`. `app/` does not exist yet; `$(wildcard)` makes the gate tolerate
-that rather than erroring on a missing path, and `app/` starts being linted the moment it
-appears. **`make check` installs nothing, needs no network and needs no running app.**
+`SRC = $(wildcard app) tests`. `$(wildcard)` was there so the gate tolerated a missing `app/`
+rather than erroring on it; `app/` now exists and is linted, typechecked and size-checked like
+everything else. **`make check` installs nothing, needs no network and needs no running app.**
 
 **Where the two languages live.** `SRC` is the *Python* scope and stays exactly as written —
 narrowing it is a regression (bead `dq-5pb.1`). The Next application therefore lives in **`web/`,
@@ -70,28 +79,51 @@ the same two facts has been deleted:
   the flag is what makes "needs no network" true rather than nearly true.
 
 That last sentence is a promise, so the marker deselection in layer 4 *implements* it rather than
-trusting it: `-m "not ge and not e2e"` is what keeps `make check` from collecting a layer that
-would launch a browser or import a framework the base interpreter does not have. Two layers are
-therefore deliberately *outside* it:
+trusting it: `-m "not ge and not e2e and not live"` is what keeps `make check` from collecting a
+layer that would launch a browser, import a framework the base interpreter does not have, or spend
+money. Three layers are therefore deliberately *outside* it:
 
 ```bash
 make check-ui     # APP_URL=http://localhost:3000 pytest -m e2e
                   # needs a RUNNING app. The app_url fixture GETs it and FAILS when nothing
                   # answers — this target may never report success against a dead server.
 
-# The GE layer has no make target: all three `ge` checks are still `pending()` stubs, so a
-# target would resolve ~40 packages from the network in order to print three skips. The
-# command, last verified working on 2026-08-16 (2 skipped, 66 deselected — there were two
-# `ge` checks then; the third arrived with LT-1b and the command has not been re-run since):
+# The `live` layer is one check (tests/test_model_sandbox.py) and one real, billed model call.
+# It is the only proof the sandbox holds against the CLI rather than against our reading of it,
+# so it exists; it costs ~$0.04, so it is never inside a command anyone runs on save. It is the
+# one layer with no make target — run it deliberately:
+set -a; . ./.env; set +a          # the call authenticates from CLAUDE_CODE_OAUTH_TOKEN
+python3 -m pytest -m live         # last run 2026-08-17: 1 passed, 156 deselected in 5.03 s
+
+make check-ge     # the uv line below, on the condition this section used to state
+```
+
+The GE layer had no target while all three of its checks were `pending()` stubs — a target that
+resolves ~40 packages from the network in order to print three skips is a trap, not a
+convenience. `app/dq/ge_runtime.py` landed with bead `dq-yov.1` and `app/rules/catalog.json` with
+`dq-yov.2`; every `ge` check is now real, so the command is a target:
+
+```bash
+make check-ge     # set -a; . ./.env; set +a  +  the uv line below
 uv run --no-project --with pytest --with great-expectations --with 'sqlalchemy>=2' \
-  --with psycopg2-binary python3 -m pytest -m ge
+  --with psycopg2-binary --with 'psycopg[binary]' python3 -m pytest -m ge
+# last run 2026-08-17: 18 passed, 139 deselected in 38.03 s
 ```
 
 `--with pytest` and `--no-project` are both load-bearing: uv's ephemeral env does not inherit
 site-packages (without the first it dies with `ModuleNotFoundError: No module named 'pytest'`),
 and without the second uv runs in project mode and writes `.venv/` and an unwanted `uv.lock`
-into the repo root. It goes back into the Makefile the day one of those three checks stops being
-a stub.
+into the repo root. **The target now sources `.env` first** — as of the compiler (`dq-yov.3`)
+this layer runs the compiled suite against the real seeded `orders` table, so the marker's
+"AND a reachable database" clause finally bites; without the DSN the layer fails, which is
+correct and a rotten way to greet someone running the target. `psycopg2-binary` and `sqlalchemy`
+are in the line because that path has landed, not in anticipation of it.
+
+The layer went from 3 s to 38 s as it started executing, and that is the price of the thing
+being checked rather than overhead: the three-rule `orders` suite includes
+`expect_column_values_to_be_unique` over an unindexed `text` column at 500,000 rows, the dearest
+rule LT-1b priced (6.59 s alone), and the store's own integration checks write and read real rows
+over the same link. A GE layer that runs in 3 s is a GE layer that never ran a rule.
 
 `make check` staying installation-free and app-free is what makes it runnable on every save.
 The heavier layers run before a commit and in the end-to-end scenario (SPEC §7).

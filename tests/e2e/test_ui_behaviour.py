@@ -145,8 +145,9 @@ def test_run_record_deep_link_targets_are_stable(driver) -> None:
 # --- write-resistance ---------------------------------------------------------
 
 
-def test_no_mutation_route_exists_for_a_stored_rule_or_run_record(driver) -> None:
-    """Amendment drafts a new revision; re-run appends a new record. Assert no
-    PATCH/PUT/DELETE route resolves for a run record, and that 'Re-run' produces
-    a NEW record id in the URL rather than editing the old one."""
+def test_rerun_appends_a_new_record_id_rather_than_editing_the_old_one(driver) -> None:
+    """The browser half of write-resistance. The SQL and route-verb halves are real
+    already, in tests/test_rule_store.py — this one drives the button: 'Re-run'
+    must land on a NEW record id in the URL, with the previous record still
+    reachable at its own."""
     pending("no running app yet")
