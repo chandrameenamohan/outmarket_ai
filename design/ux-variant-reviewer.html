@@ -1,0 +1,690 @@
+<title>Vouch Reviewer</title>
+<style>
+/* ============ tokens ============ */
+:root {
+  --bg: #F4F5F2;
+  --surface: #FFFFFF;
+  --surface-2: #ECEEE8;
+  --ink: #22303A;
+  --ink-soft: #5A6B76;
+  --line: #D9DED4;
+  --accent: #31597B;
+  --accent-soft: #E3EBF1;
+  --pass: #2F7A4D;
+  --pass-soft: #E4F0E8;
+  --fail: #A83A32;
+  --fail-soft: #F6E7E5;
+  --warn: #8A6215;
+  --warn-soft: #F4ECDA;
+  --chip-neutral-bg: #ECEEE8;
+  --chip-neutral-ink: #5A6B76;
+  --focus: #31597B;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171D21;
+    --surface: #1F272D;
+    --surface-2: #26313A;
+    --ink: #E5EAEB;
+    --ink-soft: #94A3AC;
+    --line: #34414B;
+    --accent: #85B2CF;
+    --accent-soft: #263845;
+    --pass: #82C79D;
+    --pass-soft: #23372B;
+    --fail: #E2938A;
+    --fail-soft: #432B28;
+    --warn: #D8B36A;
+    --warn-soft: #3D3423;
+    --chip-neutral-bg: #26313A;
+    --chip-neutral-ink: #94A3AC;
+    --focus: #85B2CF;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171D21;
+  --surface: #1F272D;
+  --surface-2: #26313A;
+  --ink: #E5EAEB;
+  --ink-soft: #94A3AC;
+  --line: #34414B;
+  --accent: #85B2CF;
+  --accent-soft: #263845;
+  --pass: #82C79D;
+  --pass-soft: #23372B;
+  --fail: #E2938A;
+  --fail-soft: #432B28;
+  --warn: #D8B36A;
+  --warn-soft: #3D3423;
+  --chip-neutral-bg: #26313A;
+  --chip-neutral-ink: #94A3AC;
+  --focus: #85B2CF;
+}
+
+/* ============ base ============ */
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+.serif { font-family: Charter, "Iowan Old Style", "Palatino Nova", Georgia, serif; }
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+button { font: inherit; cursor: pointer; }
+button:focus-visible, summary:focus-visible, input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+/* ============ shell ============ */
+.shell { max-width: 920px; margin: 0 auto; padding: 0 24px 96px; }
+header.masthead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px;
+  padding: 28px 0 10px; border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-family: Charter, "Iowan Old Style", Georgia, serif;
+  font-size: 26px; font-weight: 700; letter-spacing: -0.01em;
+}
+.brand small { font-size: 13px; font-weight: 400; color: var(--ink-soft); margin-left: 10px; letter-spacing: 0; }
+.role-switch { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.role-switch .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.role-switch button {
+  border: 0; background: transparent; color: var(--ink-soft);
+  padding: 6px 14px; font-size: 13px;
+}
+.role-switch button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.role-note { font-size: 11.5px; color: var(--ink-soft); }
+
+nav.tabs { display: flex; gap: 2px; padding: 14px 0 0; flex-wrap: wrap; }
+nav.tabs button {
+  border: 1px solid transparent; border-bottom: none; background: transparent;
+  color: var(--ink-soft); padding: 8px 16px 10px; font-size: 14px;
+  border-radius: 8px 8px 0 0;
+}
+nav.tabs button[aria-selected="true"] {
+  background: var(--surface); color: var(--ink);
+  border-color: var(--line); font-weight: 600;
+}
+.tabline { border-bottom: 1px solid var(--line); margin-top: -1px; }
+
+/* ============ screens ============ */
+.screen { display: none; padding-top: 30px; }
+.screen.active { display: block; }
+.screen-title { font-family: Charter, "Iowan Old Style", Georgia, serif; font-size: 24px; font-weight: 700; }
+.screen-sub { color: var(--ink-soft); margin: 6px 0 0; max-width: 62ch; }
+
+.epigraph {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 12px 18px; margin: 22px 0 26px;
+  font-family: Charter, "Iowan Old Style", Georgia, serif;
+  font-size: 15.5px; font-style: italic; color: var(--ink);
+  border-radius: 0 6px 6px 0;
+}
+.epigraph b { font-style: normal; font-family: -apple-system, system-ui, sans-serif; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 4px; }
+
+/* status atom — ONE element, sampling/error folded inside */
+.atom {
+  display: inline-block; white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px; letter-spacing: 0.02em;
+  padding: 3px 9px; border-radius: 4px; border: 1px solid;
+}
+.atom.pass   { color: var(--pass); border-color: var(--pass); background: var(--pass-soft); }
+.atom.fail   { color: var(--fail); border-color: var(--fail); background: var(--fail-soft); }
+.atom.warn   { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.atom.neutral{ color: var(--chip-neutral-ink); border-color: var(--line); background: var(--chip-neutral-bg); }
+.atom.running{ color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.atom.running .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-right: 5px; vertical-align: 1px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .atom.running .dot { animation: none; } }
+
+/* buckets & tables */
+.bucket { margin: 30px 0; }
+.bucket-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.bucket-head h2 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+.bucket-head .count { font-size: 12px; color: var(--ink-soft); }
+.bucket-note { font-size: 12.5px; color: var(--ink-soft); margin: -4px 0 10px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table.data { border-collapse: collapse; width: 100%; min-width: 640px; }
+table.data th {
+  text-align: left; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink-soft); font-weight: 600; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+table.data td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.data tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 13px; }
+.tname { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13.5px; font-weight: 600; }
+.trow-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+/* review cards */
+.queue-progress { display: flex; align-items: center; gap: 14px; margin: 20px 0 18px; font-size: 13px; color: var(--ink-soft); }
+.queue-progress .bar { flex: 1; max-width: 220px; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.queue-progress .bar span { display: block; height: 100%; width: 40%; background: var(--accent); }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 26px 28px; margin: 0 0 14px;
+}
+.card.primary { border-color: var(--accent); box-shadow: 0 1px 0 var(--line); }
+.card-context { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.card-context .tchip { font-family: ui-monospace, "SF Mono", Menlo, monospace; text-transform: none; letter-spacing: 0; background: var(--surface-2); border-radius: 4px; padding: 1px 7px; font-size: 11.5px; }
+.statement {
+  font-family: Charter, "Iowan Old Style", Georgia, serif;
+  font-size: 23px; line-height: 1.35; font-weight: 500;
+  margin: 12px 0 10px; max-width: 34ch;
+}
+.card.condensed .statement { font-size: 16.5px; margin: 6px 0 4px; }
+.evidence {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums;
+  font-size: 12.5px; color: var(--ink-soft);
+  border-left: 2px solid var(--line); padding-left: 10px; margin: 10px 0 4px;
+}
+.evidence b { color: var(--ink); font-weight: 600; }
+.flag-reason {
+  background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 6px;
+  padding: 10px 14px; margin: 12px 0; font-size: 13.5px;
+}
+.flag-reason .who { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn); display: block; margin-bottom: 2px; }
+.actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+.btn {
+  border-radius: 6px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); padding: 8px 18px; font-size: 14px; font-weight: 500;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.quiet { border-color: transparent; color: var(--ink-soft); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+details.config { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.config summary { font-size: 13px; color: var(--ink-soft); cursor: pointer; list-style: none; }
+details.config summary::before { content: "▸ "; }
+details.config[open] summary::before { content: "▾ "; }
+pre.ge {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 14px; margin: 10px 0 0; overflow-x: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5;
+  color: var(--ink);
+}
+.eng-inline {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+  color: var(--ink-soft); background: var(--surface-2); border-radius: 4px;
+  padding: 4px 8px; margin-top: 8px; display: inline-block;
+}
+
+/* role-dependent density */
+.eng-only { display: none; }
+#app[data-role="engineer"] .eng-only { display: revert; }
+#app[data-role="engineer"] td.eng-only, #app[data-role="engineer"] th.eng-only { display: table-cell; }
+#app[data-role="engineer"] .eng-inline { display: inline-block; }
+#app[data-role="engineer"] div.eng-only { display: block; }
+
+/* F12 */
+.nl-author { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; margin: 24px 0; }
+.nl-author label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px; }
+.nl-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.nl-row input {
+  flex: 1; min-width: 260px; border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 14px; font-size: 15px; background: var(--bg); color: var(--ink);
+  font-family: Charter, "Iowan Old Style", Georgia, serif;
+}
+.reject-box {
+  border: 1px solid var(--fail); background: var(--fail-soft); border-radius: 6px;
+  padding: 12px 16px; margin-top: 14px; font-size: 13.5px;
+}
+.reject-box .rlabel { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fail); display: block; margin-bottom: 3px; }
+.reject-box .stored { color: var(--ink-soft); font-size: 12.5px; margin-top: 6px; }
+.catalog { margin-top: 16px; }
+.catalog .clabel { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
+.catalog ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.catalog li {
+  font-size: 12px; border: 1px solid var(--line); border-radius: 14px;
+  padding: 3px 11px; color: var(--ink-soft); background: var(--surface);
+}
+.bulk { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin: 24px 0; overflow: hidden; }
+.bulk-head { padding: 18px 24px 6px; }
+.bulk-head h2 { font-family: Charter, "Iowan Old Style", Georgia, serif; font-size: 18px; }
+.bulk-head p { color: var(--ink-soft); font-size: 13px; margin: 4px 0 0; max-width: 66ch; }
+ul.bulk-list { list-style: none; margin: 12px 0 0; padding: 0; }
+ul.bulk-list li {
+  display: grid; grid-template-columns: 26px 1fr; gap: 4px 12px;
+  padding: 13px 24px; border-top: 1px solid var(--line); align-items: start;
+}
+ul.bulk-list li .st { font-family: Charter, "Iowan Old Style", Georgia, serif; font-size: 15.5px; }
+ul.bulk-list li .ev { grid-column: 2; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-soft); }
+ul.bulk-list li.excluded { background: var(--surface-2); }
+ul.bulk-list li.excluded .st { color: var(--ink-soft); }
+ul.bulk-list li .why-out { grid-column: 2; font-size: 12px; color: var(--warn); }
+.bulk-foot {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface-2);
+}
+.bulk-foot .capnote { font-size: 12.5px; color: var(--ink-soft); max-width: 52ch; }
+.rule-row-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.stored-rules h2 { font-family: Charter, "Iowan Old Style", Georgia, serif; font-size: 18px; margin: 32px 0 4px; }
+.stored-rules > p { color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; max-width: 66ch; }
+.edit-note { font-size: 12.5px; color: var(--ink-soft); }
+
+/* F13 */
+.runrec { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin: 18px 0; }
+.runrec-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 10px 10px 0 0;
+}
+.runrec-head .rid { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; font-weight: 600; }
+.runrec-head .meta { font-size: 12.5px; color: var(--ink-soft); }
+.runrec-head .spacer { margin-left: auto; }
+.result { padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.result:last-child { border-bottom: none; }
+.result .statement { font-size: 17px; margin: 0 0 8px; }
+.result .detail { font-size: 13.5px; margin: 8px 0 0; max-width: 68ch; }
+.offenders {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums;
+  font-size: 12.5px; margin-top: 8px; color: var(--ink);
+  background: var(--surface-2); border-radius: 6px; padding: 8px 12px;
+  overflow-x: auto; white-space: nowrap;
+}
+.immutable { font-size: 12px; color: var(--ink-soft); padding: 10px 24px 14px; }
+.dash-actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+.dash-actions .note { font-size: 12.5px; color: var(--ink-soft); }
+
+footer.pagefoot { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-soft); }
+@media (max-width: 620px) {
+  .card { padding: 20px 18px; }
+  .statement { font-size: 20px; }
+  .role-switch { align-items: flex-start; }
+}
+</style>
+
+<div id="app" data-role="expert">
+<div class="shell">
+
+  <header class="masthead">
+    <div class="brand">Vouch<small>data quality, in plain English</small></div>
+    <div class="role-switch">
+      <div class="seg" role="group" aria-label="Choose your view">
+        <button id="role-expert" aria-pressed="true" onclick="setRole('expert')">Domain expert view</button>
+        <button id="role-engineer" aria-pressed="false" onclick="setRole('engineer')">Engineer view</button>
+      </div>
+      <span class="role-note">A view, not an account — switch any time. The engineer view adds detail, never changes the language.</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="false" data-screen="explorer" onclick="show('explorer')">Table Explorer</button>
+    <button role="tab" aria-selected="true" data-screen="queue" onclick="show('queue')">Review Queue</button>
+    <button role="tab" aria-selected="false" data-screen="rules" onclick="show('rules')">Rules</button>
+    <button role="tab" aria-selected="false" data-screen="results" onclick="show('results')">Results</button>
+  </nav>
+  <div class="tabline"></div>
+
+  <!-- ============================================================ F10 -->
+  <section class="screen" id="screen-explorer">
+    <h1 class="screen-title">Table Explorer</h1>
+    <p class="screen-sub">Sorted by what nobody has vouched for yet. A table stays out of “Verified” until a full, error-free run of accepted rules has completed — a sampled or errored run never counts as coverage.</p>
+
+    <div class="bucket">
+      <div class="bucket-head"><h2>Never run</h2><span class="count">2 tables</span></div>
+      <div class="tablewrap">
+        <table class="data">
+          <thead><tr>
+            <th>Table</th><th class="num">Rows</th><th class="num">Accepted rules</th>
+            <th class="eng-only num">Columns</th><th class="eng-only">Last profiled</th>
+            <th>Last run</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="tname">refunds</span><div class="trow-sub">No rules exist yet — start with suggestions</div></td>
+              <td class="num">88,214</td><td class="num">0</td>
+              <td class="eng-only num">9</td><td class="eng-only">never</td>
+              <td><span class="atom neutral">NEVER RUN</span></td>
+            </tr>
+            <tr>
+              <td><span class="tname">shipments</span><div class="trow-sub">3 rules accepted, none has ever executed</div></td>
+              <td class="num">301,150</td><td class="num">3</td>
+              <td class="eng-only num">11</td><td class="eng-only">2d ago</td>
+              <td><span class="atom neutral">NEVER RUN</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bucket">
+      <div class="bucket-head"><h2>Ran, but unverifiable</h2><span class="count">2 tables</span></div>
+      <p class="bucket-note">These tables have rules and have run — but the last run either errored or only saw a sample. Neither outcome vouches for the table, so they sit above the fold with the uncovered ones.</p>
+      <div class="tablewrap">
+        <table class="data">
+          <thead><tr>
+            <th>Table</th><th class="num">Rows</th><th class="num">Accepted rules</th>
+            <th class="eng-only num">Columns</th><th class="eng-only">Last profiled</th>
+            <th>Last run</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="tname">orders</span><div class="trow-sub">A rule failed — and the run only saw a fifth of the table</div></td>
+              <td class="num">512,400</td><td class="num">6</td>
+              <td class="eng-only num">14</td><td class="eng-only">today 14:02</td>
+              <td><span class="atom fail">FAILED · sampled 100,000 of 512,400 rows</span></td>
+            </tr>
+            <tr>
+              <td><span class="tname">payments</span><div class="trow-sub">The run could not complete; nothing was verified</div></td>
+              <td class="num">498,822</td><td class="num">4</td>
+              <td class="eng-only num">10</td><td class="eng-only">yesterday</td>
+              <td><span class="atom warn">ERRORED · connection lost before any rule ran</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bucket">
+      <div class="bucket-head"><h2>Verified</h2><span class="count">1 table</span></div>
+      <div class="tablewrap">
+        <table class="data">
+          <thead><tr>
+            <th>Table</th><th class="num">Rows</th><th class="num">Accepted rules</th>
+            <th class="eng-only num">Columns</th><th class="eng-only">Last profiled</th>
+            <th>Last run</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="tname">customers</span><div class="trow-sub">All accepted rules passed on the full table</div></td>
+              <td class="num">84,310</td><td class="num">5</td>
+              <td class="eng-only num">8</td><td class="eng-only">yesterday</td>
+              <td><span class="atom pass">PASSED · full scan 84,310 rows · yesterday 17:41</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ F11 -->
+  <section class="screen active" id="screen-queue">
+    <h1 class="screen-title">Your review queue</h1>
+    <p class="screen-sub">Five proposals about <b>orders</b> are waiting for your judgment. One at a time — each takes about a minute. Nothing here is active: a proposal does nothing until you accept it.</p>
+
+    <div class="epigraph">
+      <b>What this evidence cannot tell you</b>
+      Evidence is drawn from a sample of this table. A rule can be true of every row here and still be wrong.
+    </div>
+
+    <div class="queue-progress">
+      <span>Decision 3 of 5 for orders</span>
+      <div class="bar"><span></span></div>
+      <span>about 2 minutes left</span>
+    </div>
+
+    <article class="card primary">
+      <div class="card-context">
+        Proposal · about the table <span class="tchip">orders</span>
+        <span class="atom neutral">UNSAVED PROPOSAL — nothing happens until you accept</span>
+      </div>
+      <h2 class="statement">Order totals are never negative.</h2>
+      <p class="evidence"><b>0</b> of 100,000 sampled rows violate this · min observed 0.00 · max observed 89,400.00</p>
+      <span class="eng-inline">expect_column_values_to_be_between · orders.order_total · min_value: 0</span>
+      <div class="actions">
+        <button class="btn primary">Accept — I vouch for this</button>
+        <button class="btn">Reject…</button>
+        <button class="btn quiet">Ask an engineer</button>
+      </div>
+      <details class="config">
+        <summary>How this becomes a check (Great Expectations configuration)</summary>
+<pre class="ge">{
+  "expectation_type": "expect_column_values_to_be_between",
+  "kwargs": { "column": "order_total", "min_value": 0 }
+}</pre>
+      </details>
+    </article>
+
+    <article class="card">
+      <div class="card-context">
+        Proposal · about the table <span class="tchip">orders</span>
+        <span class="atom warn">NEEDS REVIEW — flagged by an engineer</span>
+      </div>
+      <h2 class="statement">Order status is always one of: shipped, pending, cancelled, returned.</h2>
+      <p class="evidence"><b>4</b> distinct values seen in 100,000 sampled rows · 0 rows outside the set</p>
+      <div class="flag-reason">
+        <span class="who">Why it was flagged — Priya (data engineering), today 11:20</span>
+        “This encodes a business assumption I can’t verify. Are there statuses the sample simply didn’t catch?”
+      </div>
+      <span class="eng-inline">expect_column_values_to_be_in_set · orders.status · 4 values</span>
+      <div class="actions">
+        <button class="btn primary">Accept — I vouch for this</button>
+        <button class="btn">Reject…</button>
+        <button class="btn quiet">Ask an engineer</button>
+      </div>
+      <details class="config">
+        <summary>How this becomes a check (Great Expectations configuration)</summary>
+<pre class="ge">{
+  "expectation_type": "expect_column_values_to_be_in_set",
+  "kwargs": { "column": "status",
+              "value_set": ["shipped", "pending", "cancelled", "returned"] }
+}</pre>
+      </details>
+    </article>
+
+    <article class="card condensed">
+      <div class="card-context">Next up · <span class="tchip">orders</span> <span class="atom neutral">UNSAVED PROPOSAL</span></div>
+      <h2 class="statement">Every order has an order date.</h2>
+      <p class="evidence"><b>0</b> of 100,000 sampled rows are missing order_date</p>
+    </article>
+
+    <article class="card condensed">
+      <div class="card-context">Next up · <span class="tchip">orders</span> <span class="atom neutral">UNSAVED PROPOSAL</span></div>
+      <h2 class="statement">Order IDs are unique — no order appears twice.</h2>
+      <p class="evidence"><b>100,000</b> of 100,000 sampled rows are distinct</p>
+    </article>
+  </section>
+
+  <!-- ============================================================ F12 -->
+  <section class="screen" id="screen-rules">
+    <h1 class="screen-title">Rules for orders</h1>
+    <p class="screen-sub">Write a rule in your own words, review what the assistant proposed, and see what is already accepted. Rules only run once a person has vouched for them.</p>
+
+    <div class="nl-author">
+      <label for="nl-input">State a rule in plain English</label>
+      <div class="nl-row">
+        <input id="nl-input" type="text" value="shipped date must be after order date" />
+        <button class="btn primary">Check this rule</button>
+      </div>
+      <div class="reject-box">
+        <span class="rlabel">Can’t express this yet</span>
+        This rule compares two columns (<span class="mono">shipped_date</span> and <span class="mono">order_date</span>), and the current
+        rule set covers single-column and whole-table checks only. Multi-column rules are the first thing on the roadmap.
+        <div class="stored">Nothing was saved. Your coverage did not change.</div>
+      </div>
+      <div class="catalog">
+        <div class="clabel">What a rule can say — the 15 supported check types:</div>
+        <ul>
+          <li>never empty</li><li>always unique</li><li>between bounds</li><li>never negative</li>
+          <li>one of a set</li><li>matches a pattern</li><li>looks like an email</li><li>looks like a date</li>
+          <li>text length in range</li><li>column exists</li><li>column type is</li><li>row count in range</li>
+          <li>average in range</li><li>median in range</li><li>distinct count in range</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="bulk">
+      <div class="bulk-head">
+        <h2>Proposals awaiting a decision</h2>
+        <p>Bulk accept is a verification act, not a shortcut: it is capped at 10, every selected proposal’s evidence stays on screen at the moment you click, and anything flagged “needs review” is excluded from selection entirely.</p>
+      </div>
+      <ul class="bulk-list">
+        <li>
+          <input type="checkbox" checked aria-label="Select: Order totals are never negative" />
+          <span class="st">Order totals are never negative.</span>
+          <span class="ev">0 of 100,000 sampled rows violate this · min observed 0.00</span>
+        </li>
+        <li>
+          <input type="checkbox" checked aria-label="Select: Every order has an order date" />
+          <span class="st">Every order has an order date.</span>
+          <span class="ev">0 of 100,000 sampled rows are missing order_date</span>
+        </li>
+        <li>
+          <input type="checkbox" checked aria-label="Select: Order IDs are unique" />
+          <span class="st">Order IDs are unique — no order appears twice.</span>
+          <span class="ev">100,000 of 100,000 sampled rows are distinct</span>
+        </li>
+        <li>
+          <input type="checkbox" checked aria-label="Select: Customer email looks like an email" />
+          <span class="st">Customer email addresses look like email addresses.</span>
+          <span class="ev">99,988 of 100,000 sampled rows match · 12 empty values noted separately</span>
+        </li>
+        <li class="excluded">
+          <input type="checkbox" disabled aria-label="Excluded from bulk: Order status set" />
+          <span class="st">Order status is always one of: shipped, pending, cancelled, returned.</span>
+          <span class="ev">4 distinct values seen in 100,000 sampled rows</span>
+          <span class="why-out">Needs review — excluded from bulk accept. Decide this one on its own, in the Review Queue.</span>
+        </li>
+      </ul>
+      <div class="bulk-foot">
+        <button class="btn primary">Accept 4 selected — I vouch for each of these</button>
+        <span class="capnote">Capped at 10 per action. You are accepting each rule individually, with its evidence in view — not clearing a count.</span>
+      </div>
+    </div>
+
+    <div class="stored-rules">
+      <h2>Accepted rules</h2>
+      <p>These run when someone triggers a run. “Compiled OK” means the check is well-formed — it says nothing about whether the rule is <em>right</em>; only a person’s acceptance says that. Editing is deliberate: a changed rule returns to <em>proposed</em> and must be re-accepted before it runs again.</p>
+      <article class="card">
+        <div class="card-context">
+          Accepted rule · <span class="tchip">orders</span>
+          <span class="atom neutral">COMPILED OK — well-formed, not verified</span>
+          <span class="atom pass">ACCEPTED by Meera (merchandising) · 3 Aug</span>
+        </div>
+        <h2 class="statement" style="font-size:18px;">Order totals are never negative.</h2>
+        <div class="rule-row-meta">
+          <button class="btn">Edit this rule…</button>
+          <span class="edit-note">Editing re-opens review — no in-place changes to a live rule.</span>
+        </div>
+        <details class="config">
+          <summary>Great Expectations configuration (engineers edit here; the English recompiles it for experts)</summary>
+<pre class="ge">{
+  "expectation_type": "expect_column_values_to_be_between",
+  "kwargs": { "column": "order_total", "min_value": 0 }
+}</pre>
+        </details>
+      </article>
+      <article class="card">
+        <div class="card-context">
+          Rejected rule · <span class="tchip">orders</span>
+          <span class="atom fail">REJECTED by Meera (merchandising) · today 12:04</span>
+        </div>
+        <h2 class="statement" style="font-size:18px;">Order status is always one of the four values seen in the sample.</h2>
+        <p class="evidence">Reason stored with the rule: “cancelled orders use a fourth status not in this sample”</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============================================================ F13 -->
+  <section class="screen" id="screen-results">
+    <h1 class="screen-title">Run records</h1>
+    <p class="screen-sub">Every card below is a persisted run record with its own status field — this page reads the record, never the request. A synchronous run is simply a record that completed while you watched; a background run is one you come back to.</p>
+
+    <div class="dash-actions">
+      <button class="btn primary">Re-run orders (creates a new record)</button>
+      <span class="note">Run records are immutable. Re-running never overwrites — it appends.</span>
+    </div>
+
+    <article class="runrec">
+      <div class="runrec-head">
+        <span class="rid">run_0042 · payments</span>
+        <span class="meta">started today 15:11 by Priya · 4 rules</span>
+        <span class="spacer"></span>
+        <span class="atom running"><span class="dot"></span>RUNNING · started 12 s ago</span>
+      </div>
+      <div class="result">
+        <p class="detail">Results will appear on this record as it completes. Leaving this page changes nothing — the record keeps its own state.</p>
+      </div>
+    </article>
+
+    <article class="runrec">
+      <div class="runrec-head">
+        <span class="rid">run_0041 · orders</span>
+        <span class="meta">started today 14:32 by Priya · finished in 41 s · 6 rules</span>
+        <span class="spacer"></span>
+        <span class="atom fail">FAILED · sampled 100,000 of 512,400 rows</span>
+      </div>
+
+      <div class="result">
+        <h3 class="statement">Order totals are never negative.</h3>
+        <span class="atom fail">FAILED · sampled 100,000 of 512,400 rows</span>
+        <p class="detail"><b>23 of 100,000 sampled rows</b> have a negative order total — 0.023% of the sample. Because this run was sampled, the true count across all 512,400 rows may be higher.</p>
+        <div class="offenders">#88231&nbsp;&nbsp;−450.00&nbsp;&nbsp;&nbsp;#90177&nbsp;&nbsp;−12.99&nbsp;&nbsp;&nbsp;#91002&nbsp;&nbsp;−3.10&nbsp;&nbsp;&nbsp;#91455&nbsp;&nbsp;−87.25&nbsp;&nbsp;&nbsp;#92208&nbsp;&nbsp;−1.00&nbsp;&nbsp;&nbsp;… 18 more</div>
+        <details class="config">
+          <summary>Raw framework output</summary>
+<pre class="ge">{ "success": false,
+  "result": { "element_count": 100000, "unexpected_count": 23,
+              "unexpected_percent": 0.023,
+              "partial_unexpected_list": [-450.00, -12.99, -3.10] } }</pre>
+        </details>
+      </div>
+
+      <div class="result">
+        <h3 class="statement">Every order has an order date.</h3>
+        <span class="atom pass">PASSED · sampled 100,000 of 512,400 rows</span>
+        <p class="detail">No missing order dates in the sample. A sampled pass is reassurance, not proof — run without the cap to verify the table.</p>
+      </div>
+
+      <div class="result">
+        <h3 class="statement">Discount codes match the printed format.</h3>
+        <span class="atom warn">ERRORED · rule could not run — column “promo_code” no longer exists</span>
+        <p class="detail">The table’s schema changed after this rule was accepted. The rule was not evaluated; nothing passed or failed. An engineer can repoint or retire it from the Rules screen.</p>
+      </div>
+
+      <div class="immutable">This is record run_0041, written 14:33 today. It will read exactly the same tomorrow.</div>
+    </article>
+
+    <article class="runrec">
+      <div class="runrec-head">
+        <span class="rid">run_0039 · customers</span>
+        <span class="meta">started yesterday 17:40 by Priya · finished in 2 m 06 s · 5 rules</span>
+        <span class="spacer"></span>
+        <span class="atom pass">PASSED · full scan 84,310 rows</span>
+      </div>
+      <div class="result">
+        <h3 class="statement">Customer email addresses are never empty.</h3>
+        <span class="atom pass">PASSED · full scan 84,310 rows</span>
+        <p class="detail">Every row was checked — this result covers the whole table, and customers is marked verified in the Table Explorer.</p>
+      </div>
+      <div class="immutable">This is record run_0039, written yesterday 17:42. It will read exactly the same tomorrow.</div>
+    </article>
+  </section>
+
+  <footer class="pagefoot">
+    Vouch · connected to Supabase PostgreSQL (read-only analysis role) · orders, customers, payments and 3 more tables · Rules never run without a person’s acceptance.
+  </footer>
+
+</div>
+</div>
+
+<script>
+function show(name) {
+  document.querySelectorAll('.screen').forEach(function (s) {
+    s.classList.toggle('active', s.id === 'screen-' + name);
+  });
+  document.querySelectorAll('nav.tabs button').forEach(function (b) {
+    b.setAttribute('aria-selected', String(b.dataset.screen === name));
+  });
+}
+function setRole(role) {
+  document.getElementById('app').setAttribute('data-role', role);
+  document.getElementById('role-expert').setAttribute('aria-pressed', String(role === 'expert'));
+  document.getElementById('role-engineer').setAttribute('aria-pressed', String(role === 'engineer'));
+}
+</script>

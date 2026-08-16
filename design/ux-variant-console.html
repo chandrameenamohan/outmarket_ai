@@ -1,0 +1,769 @@
+<title>Vouch Console</title>
+<style>
+  /* ============ VOUCH — data quality ops console ============
+     Deliberately single-theme: a dark console is the product's
+     one visual world. Every color painted explicitly. */
+  :root{
+    --bg:        #10151A;   /* gunmetal blue ground */
+    --panel:     #161D24;   /* raised surface */
+    --panel2:    #1B242D;   /* hover / selected row */
+    --line:      #26313B;   /* hairline rules */
+    --text:      #CBD6DE;   /* cold light grey */
+    --dim:       #74848F;   /* secondary text */
+    --faint:     #4A5761;   /* tertiary / disabled */
+    --amber:     #E0A458;   /* accent: interactive, kbd, unsaved */
+    --amber-dim: #8A6A3E;
+    --red:       #E2695C;   /* FAILED / rejected */
+    --red-bg:    #2A1A18;
+    --green:     #57A683;   /* verified PASS only. never "compiled" */
+    --green-bg:  #14231D;
+    --blue:      #6FA8C9;   /* RUNNING / info */
+    --blue-bg:   #16222B;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--mono); font-size:12.5px; line-height:1.5;
+  }
+  ::selection{background:var(--amber-dim);color:#10151A}
+  a{color:var(--blue)}
+  kbd{
+    font-family:var(--mono); font-size:10px; color:var(--amber);
+    border:1px solid var(--amber-dim); border-bottom-width:2px;
+    border-radius:2px; padding:0 4px; margin-left:6px; line-height:1.5;
+  }
+  button{font-family:var(--mono); cursor:pointer}
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible{
+    outline:1px solid var(--amber); outline-offset:1px;
+  }
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ---------- chrome ---------- */
+  .topbar{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  .brand{font-weight:700; letter-spacing:.18em; font-size:13px; color:var(--text)}
+  .brand b{color:var(--amber)}
+  .env{color:var(--dim); font-size:11px}
+  .env i{font-style:normal;color:var(--faint)}
+  .spacer{flex:1}
+  .rolewrap{display:flex; align-items:center; gap:8px}
+  .rolewrap .lbl{font-size:10px; letter-spacing:.14em; color:var(--faint)}
+  .roleseg{display:flex; border:1px solid var(--line); border-radius:2px; overflow:hidden}
+  .roleseg button{
+    background:transparent; border:0; color:var(--dim);
+    font-size:11px; letter-spacing:.1em; padding:4px 12px;
+  }
+  .roleseg button.on{background:var(--amber); color:#10151A; font-weight:700}
+  .rolenote{font-size:10px;color:var(--faint)}
+
+  .tabs{
+    display:flex; gap:0; border-bottom:1px solid var(--line);
+    background:var(--bg); overflow-x:auto;
+  }
+  .tabs button{
+    background:transparent; border:0; border-right:1px solid var(--line);
+    color:var(--dim); padding:7px 14px; font-size:11.5px; letter-spacing:.06em;
+    white-space:nowrap; display:flex; align-items:center;
+  }
+  .tabs button.on{color:var(--text); background:var(--panel); box-shadow:inset 0 2px 0 var(--amber)}
+  .tabs button .fid{color:var(--faint); margin-right:6px}
+  .tabs button:disabled{color:var(--faint); cursor:not-allowed}
+  .tabs button:disabled kbd{opacity:.35}
+
+  main{padding:14px 16px 60px; max-width:1240px}
+  section.screen{display:none}
+  section.screen.on{display:block}
+
+  .keybar{
+    position:fixed; bottom:0; left:0; right:0;
+    display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+    padding:5px 16px; background:var(--panel); border-top:1px solid var(--line);
+    color:var(--faint); font-size:10.5px;
+  }
+  .keybar kbd{margin-left:0;margin-right:5px}
+
+  /* ---------- shared blocks ---------- */
+  .screenhead{display:flex; align-items:baseline; gap:12px; margin-bottom:4px; flex-wrap:wrap}
+  .screenhead h1{font-size:14px; letter-spacing:.08em; font-weight:700}
+  .screenhead .sub{color:var(--dim); font-size:11.5px; font-family:var(--sans)}
+  .bucket-label{
+    margin:18px 0 6px; font-size:10px; letter-spacing:.18em; color:var(--dim);
+    display:flex; gap:8px; align-items:center;
+  }
+  .bucket-label::after{content:""; flex:1; border-top:1px solid var(--line)}
+  .bucket-label .cnt{color:var(--faint)}
+  .bucket-note{font-size:10.5px; color:var(--faint); margin:-2px 0 6px; font-family:var(--sans)}
+
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:2px; background:var(--panel)}
+  table{border-collapse:collapse; width:100%; min-width:820px}
+  th{
+    text-align:left; font-size:10px; letter-spacing:.14em; color:var(--faint);
+    font-weight:400; padding:5px 10px; border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  td{
+    padding:5px 10px; border-bottom:1px solid var(--line);
+    font-size:12px; white-space:nowrap; vertical-align:top;
+  }
+  tr:last-child td{border-bottom:0}
+  tr.row:hover td{background:var(--panel2)}
+  td.r, th.r{text-align:right}
+  .tname{color:var(--text); font-weight:700}
+  .dimtx{color:var(--dim)}
+  .fainttx{color:var(--faint)}
+
+  /* status atoms — ONE token; sampling & error state live INSIDE it */
+  .atom{
+    display:inline-block; font-size:11px; letter-spacing:.04em;
+    padding:1px 7px; border-radius:2px; border:1px solid transparent;
+    white-space:nowrap;
+  }
+  .atom-never  {color:var(--dim);   border-color:var(--line); background:var(--bg)}
+  .atom-fail   {color:var(--red);   border-color:var(--red);  background:var(--red-bg)}
+  .atom-err    {color:var(--red);   border-style:dashed; border-color:var(--red); background:transparent}
+  .atom-pass   {color:var(--green); border-color:var(--green); background:var(--green-bg)}
+  .atom-run    {color:var(--blue);  border-color:var(--blue);  background:var(--blue-bg)}
+  .atom-run::before{content:"▸"; margin-right:5px; animation:blink 1.2s steps(2) infinite}
+  @keyframes blink{50%{opacity:.25}}
+  @media (prefers-reduced-motion: reduce){.atom-run::before{animation:none}}
+
+  /* chips */
+  .chip{
+    display:inline-block; font-size:10px; letter-spacing:.08em;
+    padding:0 6px; border-radius:2px; border:1px solid var(--line);
+    color:var(--dim); background:var(--bg);
+  }
+  .chip-unsaved{color:var(--amber); border-color:var(--amber-dim); background:transparent}
+  .chip-review{color:var(--amber); border-color:var(--amber); border-style:dashed; background:transparent}
+  .chip-rej{color:var(--red); border-color:var(--red); background:transparent}
+  .chip-acc{color:var(--text); border-color:var(--line); background:var(--panel2)}
+  /* compiled-ok is NEUTRAL by design — shape cleared, not meaning. never green. */
+  .chip-neutral{color:var(--dim); border-color:var(--line); background:var(--bg)}
+
+  .evidence{font-size:11px; color:var(--dim); white-space:normal}
+  .evidence b{color:var(--text); font-weight:400}
+
+  /* notice — static, no dismiss control on purpose */
+  .notice{
+    border:1px solid var(--amber-dim); border-left:3px solid var(--amber);
+    background:var(--panel); padding:8px 12px; margin:10px 0 14px;
+    font-family:var(--sans); font-size:12.5px; color:var(--text); max-width:72ch;
+  }
+  .notice .tag{
+    font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+    color:var(--amber); display:block; margin-bottom:2px;
+  }
+
+  /* cards / list rows */
+  .card{
+    border:1px solid var(--line); border-radius:2px; background:var(--panel);
+    padding:10px 12px; margin-bottom:8px;
+  }
+  .card .eng-stmt{font-family:var(--sans); font-size:13.5px; color:var(--text)}
+  .card .meta{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:4px}
+  .ctx{font-size:10.5px; color:var(--faint)}
+  .actions{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+  .btn{
+    background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    font-size:11px; padding:3px 10px; border-radius:2px; letter-spacing:.04em;
+  }
+  .btn:hover{border-color:var(--dim)}
+  .btn-acc{border-color:var(--amber-dim); color:var(--amber)}
+  .btn-danger{border-color:var(--red); color:var(--red); background:transparent}
+  .btn-primary{background:var(--amber); border-color:var(--amber); color:#10151A; font-weight:700}
+  .btn:disabled{color:var(--faint); border-color:var(--line); background:transparent; cursor:not-allowed}
+
+  details.geconf{margin-top:8px; border:1px solid var(--line); border-radius:2px; background:var(--bg)}
+  details.geconf summary{
+    cursor:pointer; padding:4px 10px; font-size:10.5px; color:var(--faint); letter-spacing:.08em;
+    list-style:none;
+  }
+  details.geconf summary::before{content:"+ "; color:var(--faint)}
+  details.geconf[open] summary::before{content:"− "}
+  details.geconf pre{
+    padding:8px 12px; border-top:1px solid var(--line); overflow-x:auto;
+    font-size:11px; color:var(--dim); line-height:1.55;
+  }
+
+  /* NL input */
+  .nlrow{display:flex; gap:8px; margin:8px 0}
+  .nlrow input{
+    flex:1; background:var(--bg); border:1px solid var(--line); border-radius:2px;
+    color:var(--text); font-family:var(--sans); font-size:13px; padding:6px 10px; min-width:200px;
+  }
+  .nlrow input::placeholder{color:var(--faint)}
+  .rejpanel{
+    border:1px dashed var(--red); border-radius:2px; background:var(--red-bg);
+    padding:8px 12px; margin:6px 0 14px;
+  }
+  .rejpanel .rtag{font-size:10px; letter-spacing:.16em; color:var(--red)}
+  .rejpanel p{font-family:var(--sans); font-size:12.5px; margin-top:2px; max-width:68ch}
+
+  /* bulk panel */
+  .bulk{border:1px solid var(--line); border-radius:2px; background:var(--panel)}
+  .bulk .bhead{
+    display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    padding:7px 12px; border-bottom:1px solid var(--line);
+  }
+  .bulk .bhead .t{font-size:10px; letter-spacing:.16em; color:var(--dim)}
+  .bulk .bhead .cap{font-size:10.5px; color:var(--amber)}
+  .brow{
+    display:flex; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line);
+    align-items:flex-start;
+  }
+  .brow:hover{background:var(--panel2)}
+  .brow input[type=checkbox]{accent-color:#E0A458; margin-top:3px}
+  .brow .bs{font-family:var(--sans); font-size:12.5px}
+  .brow.excluded{opacity:.85}
+  .brow.excluded .bs{color:var(--dim)}
+  .excl-tag{font-size:10px; color:var(--amber); border:1px dashed var(--amber); border-radius:2px; padding:0 5px; white-space:nowrap}
+  .bfoot{display:flex; align-items:center; gap:12px; padding:8px 12px; flex-wrap:wrap}
+  .bfoot .note{font-size:10.5px; color:var(--faint); font-family:var(--sans)}
+
+  /* run records */
+  .runrec{border:1px solid var(--line); border-radius:2px; background:var(--panel); margin-bottom:10px}
+  .runhead{
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+    padding:7px 12px; border-bottom:1px solid var(--line);
+  }
+  .runid{color:var(--amber); font-size:11.5px}
+  .runsrc{font-size:10px; color:var(--faint)}
+  .runbody{padding:0}
+  .rrow{display:flex; gap:12px; padding:6px 12px; border-bottom:1px solid var(--line); flex-wrap:wrap; align-items:baseline}
+  .rrow:last-child{border-bottom:0}
+  .rrow .rs{font-family:var(--sans); font-size:12.5px; min-width:260px; flex:1}
+  .fdetail{
+    padding:6px 12px 10px; border-bottom:1px solid var(--line);
+    background:var(--bg); font-size:11.5px; color:var(--dim);
+  }
+  .fdetail .offend{color:var(--red)}
+  .lockline{font-size:10px; color:var(--faint); padding:5px 12px; letter-spacing:.06em}
+
+  .catalog{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:2px 18px; padding:8px 12px}
+  .catalog span{font-size:11px; color:var(--dim)}
+  .catalog span.used{color:var(--text)}
+
+  .split{display:grid; grid-template-columns:1fr; gap:14px}
+  @media(min-width:980px){.split{grid-template-columns:3fr 2fr}}
+
+  h2.sect{font-size:10px; letter-spacing:.18em; color:var(--dim); margin:18px 0 6px; font-weight:400}
+  .microcopy{font-size:10.5px; color:var(--faint); font-family:var(--sans); max-width:70ch}
+
+  /* ---------- role filtering: DOMAIN is a filtered lens on the same console ---------- */
+  .domain-only{display:none}
+  body[data-role="domain"] .eng-only{display:none}
+  body[data-role="domain"] .domain-only{display:revert}
+  body[data-role="domain"] td.eng-col, body[data-role="domain"] th.eng-col{display:none}
+</style>
+
+<header class="topbar">
+  <span class="brand">VOUCH<b>▮</b></span>
+  <span class="env">supabase · <i>db:</i> prod-replica · <i>schema:</i> public · <i>role:</i> readonly_dq</span>
+  <span class="spacer"></span>
+  <div class="rolewrap">
+    <span class="lbl">VIEW</span>
+    <div class="roleseg" role="group" aria-label="Select view">
+      <button id="role-eng" class="on" onclick="setRole('eng')">ENGINEER</button>
+      <button id="role-dom" onclick="setRole('domain')">DOMAIN EXPERT</button>
+    </div>
+    <span class="rolenote">a view, not an account — remembered</span>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Screens">
+  <button id="tab-f10" class="on" onclick="show('f10')"><span class="fid">F10</span>TABLES<kbd>1</kbd></button>
+  <button id="tab-f11" onclick="show('f11')"><span class="fid">F11</span>REVIEW QUEUE<kbd>2</kbd></button>
+  <button id="tab-f12" onclick="show('f12')"><span class="fid">F12</span>RULES<kbd>3</kbd></button>
+  <button id="tab-f13" onclick="show('f13')"><span class="fid">F13</span>RUNS<kbd>4</kbd></button>
+</nav>
+
+<main>
+
+<!-- ================= F10 · TABLE EXPLORER ================= -->
+<section class="screen on" id="f10">
+  <div class="screenhead">
+    <h1>TABLES</h1>
+    <span class="sub">sorted by unverified — a sampled or errored run is not coverage</span>
+  </div>
+
+  <div class="bucket-label">NEVER RUN <span class="cnt">· 2 tables</span></div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>TABLE</th><th class="r">ROWS</th><th class="r eng-col">RULES ACCEPTED</th>
+        <th>LAST RUN</th><th class="eng-col">AGE</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr class="row">
+          <td class="tname">refunds</td><td class="r num">12,480</td><td class="r num eng-col">0</td>
+          <td><span class="atom atom-never">NEVER RUN · no rules</span></td>
+          <td class="fainttx eng-col">—</td>
+          <td><button class="btn">suggest rules</button></td>
+        </tr>
+        <tr class="row">
+          <td class="tname">shipments</td><td class="r num">48,112</td><td class="r num eng-col">2</td>
+          <td><span class="atom atom-never">NEVER RUN · 2 rules waiting</span></td>
+          <td class="fainttx eng-col">—</td>
+          <td><button class="btn">run<kbd>r</kbd></button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bucket-label">RAN · UNVERIFIABLE <span class="cnt">· 2 tables — errored or sampled</span></div>
+  <p class="bucket-note">These ran, but nothing here is vouched for. A row-capped run and an errored run both leave the table unverified — they are never filed under coverage.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>TABLE</th><th class="r">ROWS</th><th class="r eng-col">RULES ACCEPTED</th>
+        <th>LAST RUN</th><th class="eng-col">AGE</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr class="row">
+          <td class="tname">orders</td><td class="r num">2,410,331</td><td class="r num eng-col">6</td>
+          <td><span class="atom atom-fail">FAILED · sampled 500,000 / 2,410,331</span></td>
+          <td class="dimtx eng-col num">18m</td>
+          <td><button class="btn">open run</button></td>
+        </tr>
+        <tr class="row">
+          <td class="tname">payments</td><td class="r num">531,922</td><td class="r num eng-col">4</td>
+          <td><span class="atom atom-err">ERRORED · 1 rule could not run</span></td>
+          <td class="dimtx eng-col num">42m</td>
+          <td><button class="btn">open run</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bucket-label">VERIFIED <span class="cnt">· 2 tables — full scan, all rules ran</span></div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>TABLE</th><th class="r">ROWS</th><th class="r eng-col">RULES ACCEPTED</th>
+        <th>LAST RUN</th><th class="eng-col">AGE</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr class="row">
+          <td class="tname">customers</td><td class="r num">88,410</td><td class="r num eng-col">5</td>
+          <td><span class="atom atom-pass">PASSED · full scan · 88,410 rows</span></td>
+          <td class="dimtx eng-col num">12m</td>
+          <td><button class="btn">re-run<kbd>r</kbd></button></td>
+        </tr>
+        <tr class="row">
+          <td class="tname">order_items</td><td class="r num">6,204,987</td><td class="r num eng-col">3</td>
+          <td><span class="atom atom-pass">PASSED · full scan · 6,204,987 rows</span></td>
+          <td class="dimtx eng-col num">2h</td>
+          <td><button class="btn">re-run<kbd>r</kbd></button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= F11 · REVIEW QUEUE ================= -->
+<section class="screen" id="f11">
+  <div class="screenhead">
+    <h1>REVIEW QUEUE</h1>
+    <span class="sub">everything awaiting your judgment — stated in business language</span>
+  </div>
+
+  <div class="notice">
+    <span class="tag">EVIDENCE LIMIT — always shown</span>
+    Evidence is drawn from a sample of this table. A rule can be true of every row
+    here and still be wrong. You are the check for meaning; the numbers below only
+    check the sample.
+  </div>
+
+  <h2 class="sect">AI SUGGESTIONS — UNSAVED PROPOSALS <span class="fainttx">· nothing below is a rule until a human accepts it</span></h2>
+
+  <div class="card">
+    <div class="eng-stmt">Every order total must be zero or greater.</div>
+    <div class="meta">
+      <span class="chip chip-unsaved">PROPOSED · UNSAVED</span>
+      <span class="ctx">on orders.order_total — context, not a link</span>
+      <span class="eng-only chip chip-neutral">expect_column_values_to_be_between</span>
+    </div>
+    <div class="evidence">evidence: <b>0 of 512,000 sampled rows</b> violate this · min observed <b>0.00</b> · table has 2,410,331 rows — 21% sampled</div>
+    <div class="actions">
+      <button class="btn btn-acc">accept<kbd>a</kbd></button>
+      <button class="btn">reject…<kbd>x</kbd></button>
+      <button class="btn">ask business</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eng-stmt">Order status must be one of: shipped, pending, cancelled, returned.</div>
+    <div class="meta">
+      <span class="chip chip-review">NEEDS_REVIEW</span>
+      <span class="ctx">on orders.status</span>
+      <span class="eng-only chip chip-neutral">expect_column_values_to_be_in_set</span>
+    </div>
+    <div class="evidence">evidence: <b>4 distinct values</b> seen in 512,000 sampled rows · a status used rarely — or only by cancelled flows — may be absent from this sample</div>
+    <div class="evidence">flagged by j.okafor (eng): <b>&ldquo;encodes a business assumption I can&rsquo;t verify&rdquo;</b></div>
+    <div class="actions">
+      <button class="btn btn-acc">accept<kbd>a</kbd></button>
+      <button class="btn">reject…<kbd>x</kbd></button>
+      <button class="btn">ask business</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eng-stmt">Payment amount must be between 0.01 and 89,400.00.</div>
+    <div class="meta">
+      <span class="chip chip-review">NEEDS_REVIEW</span>
+      <span class="ctx">on payments.amount</span>
+      <span class="eng-only chip chip-neutral">expect_column_values_to_be_between</span>
+    </div>
+    <div class="evidence">evidence: <b>0 of 531,922 rows</b> violate this · max observed <b>89,400.00</b> — the upper bound is the sample&rsquo;s max, and may be overfit to data seen so far</div>
+    <div class="actions">
+      <button class="btn btn-acc">accept<kbd>a</kbd></button>
+      <button class="btn">reject…<kbd>x</kbd></button>
+      <button class="btn">ask business</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eng-stmt">Every customer must have an email address.</div>
+    <div class="meta">
+      <span class="chip chip-unsaved">PROPOSED · UNSAVED</span>
+      <span class="ctx">on customers.email</span>
+      <span class="eng-only chip chip-neutral">expect_column_values_to_not_be_null</span>
+    </div>
+    <div class="evidence">evidence: <b>312 of 88,410 rows</b> are currently null — accepting this rule will report those 312 as failures immediately</div>
+    <div class="actions">
+      <button class="btn btn-acc">accept<kbd>a</kbd></button>
+      <button class="btn">reject…<kbd>x</kbd></button>
+      <button class="btn">ask business</button>
+    </div>
+  </div>
+
+  <h2 class="sect">CURRENTLY FAILING <span class="fainttx">· accepted rules whose last run found violations</span></h2>
+
+  <div class="card">
+    <div class="eng-stmt">Every order total must be zero or greater.</div>
+    <div class="meta">
+      <span class="atom atom-fail">FAILED · sampled 500,000 / 2,410,331</span>
+      <span class="ctx">on orders.order_total · run vch_run_7f3k9q02</span>
+    </div>
+    <div class="evidence"><b>23 rows</b> have a negative order_total · 0.005% of 500,000 sampled rows · e.g. <b>#88231 −450.00</b>, <b>#90412 −12.99</b>, <b>#91177 −3,004.00</b></div>
+    <div class="actions">
+      <button class="btn">open run record</button>
+      <button class="btn">does this matter? note for eng…</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= F12 · RULE MANAGEMENT ================= -->
+<section class="screen" id="f12">
+  <div class="screenhead">
+    <h1>RULES</h1>
+    <span class="sub">author in English; the catalog decides what is expressible</span>
+  </div>
+
+  <h2 class="sect">NEW RULE — PLAIN ENGLISH</h2>
+  <div class="nlrow">
+    <input type="text" value="shipped_date must be after order_date" aria-label="Rule in plain English">
+    <button class="btn btn-primary">parse<kbd style="color:#10151A;border-color:#10151A">⏎</kbd></button>
+  </div>
+
+  <div class="rejpanel">
+    <span class="rtag">REJECTED — NOT STORED</span>
+    <p>This rule compares two columns (<b>shipped_date ↔ order_date</b>). The current
+    catalog covers single-column and table-level checks only. Nothing was saved and
+    coverage did not change. Multi-column rules are the first planned addition.</p>
+  </div>
+
+  <div class="card">
+    <div class="meta" style="margin-top:0">
+      <span class="fainttx" style="font-size:10px;letter-spacing:.14em">PREVIOUS INPUT · PARSED</span>
+    </div>
+    <div class="eng-stmt" style="margin-top:4px">&ldquo;order total can never be negative&rdquo; → <b>Every order total must be zero or greater.</b></div>
+    <div class="meta">
+      <span class="chip chip-unsaved">UNSAVED · awaiting your confirmation</span>
+      <span class="ctx">target: orders.order_total</span>
+      <span class="chip chip-neutral">COMPILED OK — shape only</span>
+    </div>
+    <p class="microcopy">&ldquo;Compiled OK&rdquo; means Great Expectations accepted the shape of this rule.
+    It says nothing about whether the rule means the right thing — that judgment is yours.</p>
+    <details class="geconf eng-only">
+      <summary>generated config — engineer detail, collapsed by default</summary>
+      <pre>{
+  "type": "expect_column_values_to_be_between",
+  "kwargs": { "column": "order_total", "min_value": 0, "strict_min": false },
+  "meta": { "authored_as": "english", "source_text": "order total can never be negative" }
+}</pre>
+    </details>
+    <div class="actions">
+      <button class="btn btn-acc">save rule</button>
+      <button class="btn">discard</button>
+    </div>
+  </div>
+
+  <div class="split">
+    <div>
+      <h2 class="sect">BULK ACCEPT — A VERIFICATION ACT <span class="fainttx">· read each evidence line; cap 5 per action</span></h2>
+      <div class="bulk">
+        <div class="bhead">
+          <span class="t">SELECTED PROPOSALS · orders</span>
+          <span class="cap num">3 selected · cap 5</span>
+        </div>
+        <label class="brow">
+          <input type="checkbox" checked>
+          <span>
+            <span class="bs">Every order must have an order_date.</span><br>
+            <span class="evidence">0 of 512,000 sampled rows are null · column is NOT NULL in schema</span>
+          </span>
+        </label>
+        <label class="brow">
+          <input type="checkbox" checked>
+          <span>
+            <span class="bs">Order id must be unique.</span><br>
+            <span class="evidence">512,000 of 512,000 sampled values distinct · primary key in schema</span>
+          </span>
+        </label>
+        <label class="brow">
+          <input type="checkbox" checked>
+          <span>
+            <span class="bs">Currency must be one of: USD, EUR, GBP, INR.</span><br>
+            <span class="evidence">4 of 4 catalog currencies observed · 0 of 512,000 sampled rows outside set</span>
+          </span>
+        </label>
+        <div class="brow excluded">
+          <span class="excl-tag">EXCLUDED — NEEDS_REVIEW</span>
+          <span>
+            <span class="bs">Order status must be one of: shipped, pending, cancelled, returned.</span><br>
+            <span class="evidence">needs_review is never bulk-selectable — it goes through the queue, one at a time</span>
+          </span>
+        </div>
+        <div class="brow excluded">
+          <span class="excl-tag">EXCLUDED — NEEDS_REVIEW</span>
+          <span>
+            <span class="bs">Payment amount must be between 0.01 and 89,400.00.</span><br>
+            <span class="evidence">upper bound is the sample max — possibly overfit; review individually</span>
+          </span>
+        </div>
+        <div class="bfoot">
+          <button class="btn btn-primary">ACCEPT 3<kbd style="color:#10151A;border-color:#10151A">b</kbd></button>
+          <span class="note">Accepting confirms you have read the 3 evidence lines above. One action never
+          completes more than 5 proposals — this is verification, not dismissal.</span>
+        </div>
+      </div>
+
+      <h2 class="sect">STORED RULES · orders <span class="fainttx">· 6 accepted, 1 rejected</span></h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>RULE</th><th>STATUS</th><th class="eng-col">TYPE</th><th></th></tr></thead>
+          <tbody>
+            <tr class="row">
+              <td style="white-space:normal;font-family:var(--sans);font-size:12.5px">Every order total must be zero or greater.</td>
+              <td><span class="chip chip-acc">ACCEPTED</span></td>
+              <td class="eng-col"><span class="chip chip-neutral">values_to_be_between</span></td>
+              <td><button class="btn">revise…</button></td>
+            </tr>
+            <tr class="row">
+              <td style="white-space:normal;font-family:var(--sans);font-size:12.5px">Every order must have an order_date.</td>
+              <td><span class="chip chip-acc">ACCEPTED</span></td>
+              <td class="eng-col"><span class="chip chip-neutral">values_to_not_be_null</span></td>
+              <td><button class="btn">revise…</button></td>
+            </tr>
+            <tr class="row">
+              <td style="white-space:normal;font-family:var(--sans);font-size:12.5px">Order status limited to the 4 sampled values.</td>
+              <td><span class="chip chip-rej">REJECTED</span></td>
+              <td class="eng-col"><span class="chip chip-neutral">values_to_be_in_set</span></td>
+              <td class="dimtx" style="white-space:normal;font-size:11px">reason: &ldquo;cancelled orders use a fourth status not in this sample&rdquo; — m.iyer (domain)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="microcopy" style="margin-top:6px">No inline editing. <b>revise…</b> opens a deliberate
+      confirmation flow: the prior version is retained, the change is attributed, and the rule
+      re-compiles before anything is stored. Rejections keep their reason forever.</p>
+    </div>
+
+    <div class="eng-only">
+      <h2 class="sect">CATALOG — 15 EXPECTATION TYPES <span class="fainttx">· the generator may only pick from this menu</span></h2>
+      <div class="tablewrap" style="min-width:0">
+        <div class="catalog">
+          <span class="used">expect_column_values_to_not_be_null</span>
+          <span>expect_column_values_to_be_null</span>
+          <span class="used">expect_column_values_to_be_between</span>
+          <span class="used">expect_column_values_to_be_in_set</span>
+          <span>expect_column_values_to_not_be_in_set</span>
+          <span>expect_column_values_to_match_regex</span>
+          <span class="used">expect_column_values_to_be_unique</span>
+          <span>expect_column_value_lengths_to_be_between</span>
+          <span>expect_column_min_to_be_between</span>
+          <span>expect_column_max_to_be_between</span>
+          <span>expect_column_mean_to_be_between</span>
+          <span>expect_column_median_to_be_between</span>
+          <span>expect_table_row_count_to_be_between</span>
+          <span>expect_table_columns_to_match_set</span>
+          <span>expect_column_distinct_values_to_be_in_set</span>
+        </div>
+      </div>
+      <p class="microcopy" style="margin-top:6px">Anything outside this list is inexpressible and is
+      refused with a reason — a hallucinated type is a defect, not a feature request.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= F13 · RESULTS DASHBOARD ================= -->
+<section class="screen" id="f13">
+  <div class="screenhead">
+    <h1>RUNS</h1>
+    <span class="sub">every panel below renders a persisted run record — never the request. &ldquo;running&rdquo; is just a status value; a synchronous run is a record that completed while you watched.</span>
+  </div>
+
+  <!-- FAILED · SAMPLED -->
+  <div class="runrec">
+    <div class="runhead">
+      <span class="runid">vch_run_7f3k9q02</span>
+      <span class="tname">orders</span>
+      <span class="atom atom-fail">FAILED · sampled 500,000 / 2,410,331</span>
+      <span class="dimtx num">2026-08-16 14:02:11Z · 41.8s · trigger: manual (j.okafor)</span>
+      <span class="spacer"></span>
+      <button class="btn">re-run<kbd>r</kbd></button>
+    </div>
+    <div class="runbody">
+      <div class="rrow">
+        <span class="rs">Every order total must be zero or greater.</span>
+        <span class="atom atom-fail">FAILED · sampled 500,000 / 2,410,331</span>
+      </div>
+      <div class="fdetail">
+        <span class="offend">23 rows have a negative order_total</span> · 0.005% of 500,000 sampled rows —
+        the other 1,910,331 rows were not scanned<br>
+        offenders: <span class="offend">#88231 −450.00 · #90412 −12.99 · #91177 −3,004.00 · #93008 −0.01</span> · +19 more
+      </div>
+      <div class="rrow">
+        <span class="rs">Every order must have an order_date.</span>
+        <span class="atom atom-pass">PASSED · sampled 500,000 / 2,410,331</span>
+      </div>
+      <div class="rrow">
+        <span class="rs">Order id must be unique.</span>
+        <span class="atom atom-pass">PASSED · sampled 500,000 / 2,410,331</span>
+      </div>
+      <details class="geconf eng-only" style="margin:8px 12px">
+        <summary>raw framework output — retained verbatim on the record</summary>
+        <pre>{"success": false, "statistics": {"evaluated_expectations": 6, "unsuccessful_expectations": 1},
+ "vouch_meta": {"row_cap": 500000, "rows_total": 2410331, "sampled": true}}</pre>
+      </details>
+      <div class="lockline">RECORD vch_run_7f3k9q02 · append-only · no edit affordance exists for run records</div>
+    </div>
+  </div>
+
+  <!-- ERRORED -->
+  <div class="runrec">
+    <div class="runhead">
+      <span class="runid">vch_run_7f3hcx88</span>
+      <span class="tname">payments</span>
+      <span class="atom atom-err">ERRORED · 1 of 4 rules could not run</span>
+      <span class="dimtx num">2026-08-16 13:38:02Z · 12.4s · trigger: manual (j.okafor)</span>
+      <span class="spacer"></span>
+      <button class="btn">re-run<kbd>r</kbd></button>
+    </div>
+    <div class="runbody">
+      <div class="rrow">
+        <span class="rs">Payment method must be one of: card, wallet, bank_transfer, cod.</span>
+        <span class="atom atom-err">ERRORED · rule could not run</span>
+      </div>
+      <div class="fdetail">
+        column <b>charge_currency</b> referenced by this rule no longer exists on payments —
+        schema changed after the rule was accepted. The run is <b>not</b> a pass and payments
+        stays unverified until this is resolved.
+      </div>
+      <div class="rrow">
+        <span class="rs">Payment amount must not be null.</span>
+        <span class="atom atom-pass">PASSED · full scan · 531,922 rows</span>
+      </div>
+      <div class="rrow">
+        <span class="rs">Payment id must be unique.</span>
+        <span class="atom atom-pass">PASSED · full scan · 531,922 rows</span>
+      </div>
+      <div class="lockline">RECORD vch_run_7f3hcx88 · append-only</div>
+    </div>
+  </div>
+
+  <!-- RUNNING -->
+  <div class="runrec">
+    <div class="runhead">
+      <span class="runid">vch_run_7f3mzt41</span>
+      <span class="tname">shipments</span>
+      <span class="atom atom-run">RUNNING · started 41s ago</span>
+      <span class="dimtx num">2026-08-16 14:19:55Z · trigger: manual (m.iyer)</span>
+      <span class="spacer"></span>
+      <button class="btn" disabled>re-run</button>
+    </div>
+    <div class="runbody">
+      <div class="rrow">
+        <span class="rs">2 rules queued against 48,112 rows</span>
+        <span class="dimtx">this panel polls the record; when the status field changes, the panel changes</span>
+      </div>
+      <div class="lockline">RECORD vch_run_7f3mzt41 · status is a field on the record, not a spinner on a request</div>
+    </div>
+  </div>
+
+  <!-- PASSED · FULL SCAN -->
+  <div class="runrec">
+    <div class="runhead">
+      <span class="runid">vch_run_7f3g2p19</span>
+      <span class="tname">customers</span>
+      <span class="atom atom-pass">PASSED · full scan · 88,410 rows</span>
+      <span class="dimtx num">2026-08-16 14:07:44Z · 6.2s · trigger: manual (j.okafor)</span>
+      <span class="spacer"></span>
+      <button class="btn">re-run<kbd>r</kbd></button>
+    </div>
+    <div class="runbody">
+      <div class="rrow">
+        <span class="rs">5 rules · 5 passed · every row scanned — this table is verified as of this record</span>
+        <span class="dimtx num">cached · renders on load without re-execution</span>
+      </div>
+      <div class="lockline">RECORD vch_run_7f3g2p19 · append-only</div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="keybar">
+  <span><kbd>1</kbd>–<kbd>4</kbd>screens</span>
+  <span><kbd>r</kbd>re-run</span>
+  <span><kbd>a</kbd>accept</span>
+  <span><kbd>x</kbd>reject</span>
+  <span><kbd>b</kbd>bulk accept (capped)</span>
+  <span><kbd>/</kbd>new rule in English</span>
+  <span class="spacer"></span>
+  <span id="rolefoot">view: ENGINEER — coverage owner</span>
+</footer>
+
+<script>
+  var screens=["f10","f11","f12","f13"];
+  function show(id){
+    screens.forEach(function(s){
+      document.getElementById(s).classList.toggle("on",s===id);
+      document.getElementById("tab-"+s).classList.toggle("on",s===id);
+    });
+  }
+  function setRole(r){
+    document.body.setAttribute("data-role",r);
+    document.getElementById("role-eng").classList.toggle("on",r==="eng");
+    document.getElementById("role-dom").classList.toggle("on",r==="domain");
+    var f10=document.getElementById("tab-f10");
+    if(r==="domain"){
+      f10.disabled=true; f10.title="Engineer view — the domain expert never lands on a table list";
+      if(document.getElementById("f10").classList.contains("on")) show("f11");
+      document.getElementById("rolefoot").textContent="view: DOMAIN EXPERT — meaning owner · ≤5 min per table";
+    }else{
+      f10.disabled=false; f10.title="";
+      document.getElementById("rolefoot").textContent="view: ENGINEER — coverage owner";
+    }
+  }
+  document.addEventListener("keydown",function(e){
+    if(e.target.tagName==="INPUT")return;
+    var i=["1","2","3","4"].indexOf(e.key);
+    if(i>-1 && !document.getElementById("tab-"+screens[i]).disabled) show(screens[i]);
+  });
+</script>

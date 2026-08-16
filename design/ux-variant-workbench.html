@@ -1,0 +1,916 @@
+<title>Diglot</title>
+<style>
+  /* ============ TOKENS ============ */
+  :root {
+    --bg: #e9ecef;            /* workshop grey ground */
+    --surface: #ffffff;       /* card */
+    --en-tint: #fbfaf6;       /* warm paper — the English pane */
+    --ge-tint: #f2f5f9;       /* cool paper — the GE pane */
+    --rail-bg: #dfe3e8;
+    --line: #ccd3da;
+    --line-soft: #dde2e8;
+    --ink: #1b242e;
+    --muted: #5c6773;
+    --faint: #8a94a0;
+    --accent: #146b62;        /* deep teal — interactive */
+    --accent-soft: #146b6218;
+    --fail: #b03a43;
+    --warn: #8a6410;
+    --pass: #2c7a4b;
+    --info: #33619e;          /* running */
+    --neutral-chip: #5c6773;  /* "Compiled OK" lives here, never green */
+    --shadow: 0 1px 3px rgba(20, 30, 40, .08);
+    --serif: "Charter", "Iowan Old Style", "Palatino", Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13171c;
+      --surface: #1b2127;
+      --en-tint: #201e19;
+      --ge-tint: #182028;
+      --rail-bg: #171c21;
+      --line: #333d47;
+      --line-soft: #29323b;
+      --ink: #e6eaee;
+      --muted: #9aa5b0;
+      --faint: #6d7883;
+      --accent: #4baa9c;
+      --accent-soft: #4baa9c22;
+      --fail: #e27078;
+      --warn: #d9a94c;
+      --pass: #63be86;
+      --info: #7fa3d8;
+      --neutral-chip: #9aa5b0;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13171c;
+    --surface: #1b2127;
+    --en-tint: #201e19;
+    --ge-tint: #182028;
+    --rail-bg: #171c21;
+    --line: #333d47;
+    --line-soft: #29323b;
+    --ink: #e6eaee;
+    --muted: #9aa5b0;
+    --faint: #6d7883;
+    --accent: #4baa9c;
+    --accent-soft: #4baa9c22;
+    --fail: #e27078;
+    --warn: #d9a94c;
+    --pass: #63be86;
+    --info: #7fa3d8;
+    --neutral-chip: #9aa5b0;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  }
+
+  /* ============ BASE ============ */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button { font: inherit; cursor: pointer; }
+  :is(button, a, input, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input { font: inherit; color: var(--ink); }
+  h1, h2, h3, h4 { margin: 0; text-wrap: balance; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* eyebrow labels */
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* ============ TOP BAR ============ */
+  .topbar {
+    display: flex; align-items: center; gap: 20px;
+    padding: 0 20px;
+    height: 54px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand .wordmark { font-family: var(--serif); font-size: 20px; font-weight: 700; letter-spacing: .01em; }
+  .brand .glyph { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .brand .sub { font-size: 11px; color: var(--muted); }
+
+  .role-switch {
+    display: flex; align-items: center; gap: 8px;
+    margin-left: auto;
+  }
+  .role-switch .cap { font-size: 11px; color: var(--muted); }
+  .role-seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .role-seg button {
+    border: 0; background: var(--surface); color: var(--muted);
+    padding: 5px 12px; font-size: 12px; font-weight: 600;
+  }
+  .role-seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+
+  .tabs { display: flex; gap: 2px; }
+  .tabs button {
+    border: 0; background: none; color: var(--muted);
+    padding: 17px 12px 14px; font-size: 13px; font-weight: 600;
+    border-bottom: 3px solid transparent;
+  }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .tabs button .fkey { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-right: 5px; }
+
+  /* ============ FRAME: RAIL + MAIN ============ */
+  .frame { display: flex; min-height: calc(100vh - 55px); }
+  .rail {
+    width: 248px; flex: none;
+    background: var(--rail-bg);
+    border-right: 1px solid var(--line);
+    padding: 18px 16px 32px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .rail-block { display: flex; flex-direction: column; gap: 8px; }
+  .conn {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .conn .dbname { color: var(--ink); font-weight: 600; }
+  .ro-pill {
+    display: inline-block; margin-top: 2px; align-self: flex-start;
+    font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 6px; color: var(--muted);
+  }
+  .rail-tables { display: flex; flex-direction: column; }
+  .rail-tables a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 4px;
+    color: var(--ink); text-decoration: none;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .rail-tables a:hover { background: var(--accent-soft); }
+  .rail-tables .rows { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.never { background: none; border: 1.5px solid var(--fail); }
+  .dot.unver { background: var(--warn); }
+  .dot.verif { background: var(--accent); }
+  .legend { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--muted); }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+  .rail-cap-exp { display: none; font-size: 11px; color: var(--warn); font-style: italic; }
+  .catalog-count { font-size: 11px; color: var(--muted); }
+  .catalog-count b { color: var(--ink); }
+
+  /* Expert view: rail becomes context, not navigation */
+  body.expert .rail-tables a { pointer-events: none; color: var(--muted); }
+  body.expert .rail-tables a:hover { background: none; }
+  body.expert .rail-cap-exp { display: block; }
+  body.expert .rail-cap-eng { display: none; }
+
+  main { flex: 1; min-width: 0; padding: 24px 28px 64px; }
+  .screen { display: none; max-width: 1060px; margin: 0 auto; }
+  .screen.active { display: block; }
+  .screen-head { margin-bottom: 18px; display: flex; flex-direction: column; gap: 4px; }
+  .screen-head h2 { font-family: var(--serif); font-size: 22px; font-weight: 700; }
+  .screen-head .who { font-size: 12px; color: var(--muted); }
+
+  /* ============ CHIPS: THE STATUS ATOM ============ */
+  .atom {
+    display: inline-flex; align-items: center;
+    font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+    letter-spacing: .03em;
+    padding: 2px 8px; border-radius: 3px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .atom.fail  { color: var(--fail); border-color: var(--fail); background: color-mix(in srgb, var(--fail) 9%, transparent); }
+  .atom.warn  { color: var(--warn); border-color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  .atom.pass  { color: var(--pass); border-color: var(--pass); background: color-mix(in srgb, var(--pass) 9%, transparent); }
+  .atom.info  { color: var(--info); border-color: var(--info); background: color-mix(in srgb, var(--info) 9%, transparent); }
+  .atom.plain { color: var(--neutral-chip); border-color: var(--line); background: none; }
+  .atom.proposed { color: var(--info); border-color: var(--info); background: none; border-style: dashed; }
+  .atom.nr { color: var(--warn); border-color: var(--warn); background: none; border-style: dashed; }
+
+  /* ============ CARDS ============ */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ============ THE SPREAD: EN | GE facing pages ============ */
+  .spread {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--line-soft);
+  }
+  .pane { padding: 12px 16px 14px; min-width: 0; }
+  .pane .eyebrow { display: block; margin-bottom: 6px; }
+  .en-pane { background: var(--en-tint); }
+  .en-pane .stmt { font-family: var(--serif); font-size: 15.5px; line-height: 1.4; }
+  .ge-pane { background: var(--ge-tint); border-left: 1px dashed var(--line); }
+  .ge-pane pre {
+    margin: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+    color: var(--ink); overflow-x: auto;
+  }
+  .ge-pane .k { color: var(--accent); }
+  .ge-note { display: none; padding: 8px 16px; background: var(--ge-tint); border-top: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 11px; color: var(--muted); align-items: center; gap: 8px; }
+  body.expert .ge-pane { display: none; }
+  body.expert .spread { grid-template-columns: 1fr; }
+  body.expert .ge-note { display: flex; }
+
+  .evidence {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  }
+  .evidence::before { content: "▸ evidence"; color: var(--faint); font-size: 10px; letter-spacing: .05em; }
+
+  /* ============ F10 · TABLE EXPLORER ============ */
+  .bucket { margin-bottom: 26px; }
+  .bucket-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .bucket-head h3 { font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+  .bucket-head .why { font-size: 12px; color: var(--muted); }
+  .tbl-wrap { overflow-x: auto; }
+  table.explorer { width: 100%; border-collapse: collapse; min-width: 720px; }
+  table.explorer th {
+    text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint);
+    padding: 8px 14px; border-bottom: 1px solid var(--line);
+  }
+  table.explorer td { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.explorer tr:last-child td { border-bottom: 0; }
+  table.explorer .tname { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  table.explorer .tname a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+  table.explorer .tname a:hover { border-bottom-color: var(--accent); color: var(--accent); }
+  table.explorer td.r { text-align: right; }
+  .sort-note { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 16px; }
+  .sort-note b { color: var(--ink); }
+
+  /* ============ F11 · REVIEW QUEUE ============ */
+  .epistemic {
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-family: var(--serif); font-size: 14.5px; font-style: italic;
+    color: var(--ink);
+  }
+  .suggestion { margin-bottom: 16px; }
+  .sg-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
+  .ctx-chip {
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 7px;
+  }
+  .sg-head .spacer { flex: 1; }
+  .sg-body { padding: 6px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .sg-actions { display: flex; gap: 8px; padding: 0 16px 14px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 4px; padding: 5px 14px; font-size: 12.5px; font-weight: 600;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .btn.primary:hover { color: var(--surface); filter: brightness(1.08); }
+  .btn.danger:hover { border-color: var(--fail); color: var(--fail); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .unsaved-note { font-size: 11px; color: var(--muted); font-style: italic; }
+  .flag-note {
+    font-size: 12px; color: var(--warn); font-family: var(--serif); font-style: italic;
+    padding: 0 16px 10px;
+  }
+
+  /* ============ F12 · RULES ============ */
+  .f12-grid { display: grid; grid-template-columns: 1fr 236px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .f12-grid { grid-template-columns: 1fr; } }
+  .nl-input-row { display: flex; gap: 8px; padding: 14px 16px; }
+  .nl-input-row input {
+    flex: 1; border: 1px solid var(--line); border-radius: 4px;
+    padding: 8px 12px; font-family: var(--serif); font-size: 14.5px;
+    background: var(--en-tint); min-width: 0;
+  }
+  .nl-input-row input::placeholder { color: var(--faint); font-style: italic; }
+  .reject-card { border-left: 3px solid var(--fail); }
+  .reject-inner { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .reject-inner .attempt { font-family: var(--serif); font-size: 14.5px; }
+  .reject-inner .attempt::before { content: "“"; color: var(--faint); }
+  .reject-inner .attempt::after { content: "”"; color: var(--faint); }
+  .reason { font-size: 13px; color: var(--ink); }
+  .reason b { color: var(--fail); }
+  .not-stored { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  .rule-row-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
+  .compiled-hint { font-size: 11px; color: var(--muted); font-style: italic; }
+
+  .catalog { position: sticky; top: 16px; }
+  .catalog-list { list-style: none; margin: 0; padding: 6px 0; }
+  .catalog-list li {
+    font-family: var(--mono); font-size: 10.5px; padding: 3px 14px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .catalog-list li.on { color: var(--ink); }
+  .catalog-list li.on::before { content: "● "; color: var(--accent); font-size: 8px; }
+  .catalog-list li::before { content: "○ "; color: var(--faint); font-size: 8px; }
+  .catalog-head { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 2px; }
+  .catalog-foot { padding: 6px 14px 12px; font-size: 11px; color: var(--muted); }
+
+  /* bulk accept */
+  .bulk { margin-top: 24px; }
+  .bulk-head { padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .bulk-head .cap-note { font-size: 12px; color: var(--muted); }
+  .bulk-head .cap-note b { color: var(--ink); }
+  .bulk-list { list-style: none; margin: 0; padding: 0; }
+  .bulk-list li {
+    display: grid; grid-template-columns: 24px 1fr auto; gap: 4px 10px;
+    padding: 10px 16px; border-top: 1px solid var(--line-soft); align-items: start;
+  }
+  .bulk-list .b-stmt { font-family: var(--serif); font-size: 14px; }
+  .bulk-list .evidence { grid-column: 2; }
+  .bulk-list input[type=checkbox] { margin-top: 3px; accent-color: var(--accent); }
+  .bulk-list li.excluded { opacity: .55; }
+  .bulk-list li.excluded .b-stmt { text-decoration: none; }
+  .excl-why { grid-column: 2; font-size: 11px; color: var(--warn); font-style: italic; }
+  .bulk-foot { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .bulk-foot .count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .mutability-note {
+    margin-top: 14px; font-size: 12px; color: var(--muted);
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .mutability-note::before { content: "§"; font-family: var(--serif); color: var(--faint); }
+
+  /* ============ F13 · RESULTS ============ */
+  .record { margin-bottom: 18px; }
+  .rec-head {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line-soft); flex-wrap: wrap;
+  }
+  .rec-id { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+  .rec-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .rec-head .spacer { flex: 1; }
+  .result-row { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 7px; }
+  .result-row:last-child { border-bottom: 0; }
+  .rr-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rr-top .stmt { font-family: var(--serif); font-size: 15px; }
+  .viol { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-x: auto; white-space: nowrap; }
+  .viol .pct { color: var(--muted); }
+  .viol .vals { color: var(--fail); }
+  details.raw { font-size: 12px; }
+  details.raw summary {
+    cursor: pointer; font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    letter-spacing: .05em;
+  }
+  details.raw pre {
+    margin: 6px 0 0; background: var(--ge-tint); border: 1px solid var(--line-soft);
+    border-radius: 4px; padding: 10px 12px; font-family: var(--mono); font-size: 11px;
+    overflow-x: auto; color: var(--muted);
+  }
+  .rec-note { font-size: 11px; color: var(--muted); font-style: italic; }
+  .running-pulse { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--info); margin-right: 6px;
+    animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .running-pulse { animation: none; } }
+
+  /* responsive */
+  @media (max-width: 760px) {
+    .frame { flex-direction: column; }
+    .rail { width: 100%; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; flex-wrap: wrap; gap: 24px; }
+    .spread { grid-template-columns: 1fr; }
+    .ge-pane { border-left: 0; border-top: 1px dashed var(--line); }
+    main { padding: 18px 14px 48px; }
+  }
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="wordmark">Diglot</span>
+    <span class="glyph">¶&nbsp;⇄&nbsp;{&thinsp;}</span>
+    <span class="sub">data-quality workbench</span>
+  </div>
+  <nav class="tabs" aria-label="Screens">
+    <button id="tab-f10" aria-selected="true" onclick="show('f10')"><span class="fkey">F10</span>Table Explorer</button>
+    <button id="tab-f11" aria-selected="false" onclick="show('f11')"><span class="fkey">F11</span>Review Queue</button>
+    <button id="tab-f12" aria-selected="false" onclick="show('f12')"><span class="fkey">F12</span>Rules</button>
+    <button id="tab-f13" aria-selected="false" onclick="show('f13')"><span class="fkey">F13</span>Results</button>
+  </nav>
+  <div class="role-switch">
+    <span class="cap">Viewing as&nbsp;·&nbsp;a view, not an account</span>
+    <div class="role-seg" role="group" aria-label="Role view">
+      <button id="role-eng" aria-pressed="true" onclick="setRole('eng')">Engineer</button>
+      <button id="role-exp" aria-pressed="false" onclick="setRole('exp')">Domain expert</button>
+    </div>
+  </div>
+</header>
+
+<div class="frame">
+  <!-- ============ PERSISTENT LEFT RAIL ============ -->
+  <aside class="rail">
+    <div class="rail-block">
+      <span class="eyebrow">Connection</span>
+      <div class="conn">
+        <span class="dbname">supabase · shop-prod-replica</span>
+        <span>schema&nbsp;public · postgres 15</span>
+        <span class="ro-pill">read-only role</span>
+      </div>
+    </div>
+    <div class="rail-block">
+      <span class="eyebrow">Tables</span>
+      <span class="rail-cap-eng" style="font-size:11px;color:var(--muted)">Click to open a table's rules.</span>
+      <span class="rail-cap-exp">Context only — table names are not navigation in this view.</span>
+      <div class="rail-tables">
+        <a href="#f10" onclick="show('f10');return false"><span class="dot never"></span>customers <span class="rows num">184K</span></a>
+        <a href="#f10" onclick="show('f10');return false"><span class="dot never"></span>refunds <span class="rows num">31K</span></a>
+        <a href="#f10" onclick="show('f10');return false"><span class="dot unver"></span>payments <span class="rows num">2.31M</span></a>
+        <a href="#f10" onclick="show('f10');return false"><span class="dot unver"></span>shipments <span class="rows num">1.9M</span></a>
+        <a href="#f10" onclick="show('f10');return false"><span class="dot verif"></span>orders <span class="rows num">2.4M</span></a>
+        <a href="#f10" onclick="show('f10');return false"><span class="dot verif"></span>order_items <span class="rows num">6.1M</span></a>
+      </div>
+    </div>
+    <div class="rail-block">
+      <span class="eyebrow">Verification buckets</span>
+      <div class="legend">
+        <div><span class="dot never"></span>never run</div>
+        <div><span class="dot unver"></span>ran, unverifiable</div>
+        <div><span class="dot verif"></span>verified</div>
+      </div>
+    </div>
+    <div class="rail-block">
+      <span class="eyebrow">Expectation catalog</span>
+      <span class="catalog-count"><b>15</b> curated GE types — the whole menu.<br>Anything outside it is refused.</span>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ==================================================== F10 -->
+    <section class="screen active" id="f10" aria-labelledby="f10h">
+      <div class="screen-head">
+        <h2 id="f10h">Table Explorer</h2>
+        <span class="who">The engineer's door — where is coverage missing, and which coverage can actually be trusted.</span>
+      </div>
+      <p class="sort-note">sorted by <b>unverified</b> — a table whose last run errored or was sampled is not vouched for, and never files under “has coverage”.</p>
+
+      <div class="bucket">
+        <div class="bucket-head">
+          <h3>1 · Never run</h3><span class="why">no evidence at all — top of the pile</span>
+        </div>
+        <div class="card tbl-wrap">
+          <table class="explorer">
+            <thead><tr><th>Table</th><th style="text-align:right">Rows</th><th style="text-align:right">Accepted rules</th><th>Last run</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="tname"><a href="#f12" onclick="show('f12');return false">customers</a></td>
+                <td class="r num">184,203</td>
+                <td class="r num">3</td>
+                <td><span class="atom plain">NEVER RUN</span></td>
+                <td><button class="btn">Run rules</button></td>
+              </tr>
+              <tr>
+                <td class="tname"><a href="#f12" onclick="show('f12');return false">refunds</a></td>
+                <td class="r num">31,440</td>
+                <td class="r num">0</td>
+                <td><span class="atom plain">NEVER RUN · NO RULES</span></td>
+                <td><button class="btn">Suggest rules</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bucket">
+        <div class="bucket-head">
+          <h3>2 · Ran, but unverifiable</h3><span class="why">errored or sampled — a result exists, a verdict does not</span>
+        </div>
+        <div class="card tbl-wrap">
+          <table class="explorer">
+            <thead><tr><th>Table</th><th style="text-align:right">Rows</th><th style="text-align:right">Accepted rules</th><th>Last run</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="tname"><a href="#f13" onclick="show('f13');return false">payments</a></td>
+                <td class="r num">2,310,155</td>
+                <td class="r num">5</td>
+                <td><span class="atom warn">PASSED · SAMPLED 500,000 / 2,310,155</span></td>
+                <td><button class="btn">Re-run</button></td>
+              </tr>
+              <tr>
+                <td class="tname"><a href="#f13" onclick="show('f13');return false">shipments</a></td>
+                <td class="r num">1,902,884</td>
+                <td class="r num">2</td>
+                <td><span class="atom fail">ERRORED · RULE COULD NOT RUN</span></td>
+                <td><button class="btn">Re-run</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bucket">
+        <div class="bucket-head">
+          <h3>3 · Verified</h3><span class="why">full scan completed — pass or fail, the verdict is real</span>
+        </div>
+        <div class="card tbl-wrap">
+          <table class="explorer">
+            <thead><tr><th>Table</th><th style="text-align:right">Rows</th><th style="text-align:right">Accepted rules</th><th>Last run</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="tname"><a href="#f13" onclick="show('f13');return false">orders</a></td>
+                <td class="r num">2,400,000</td>
+                <td class="r num">6</td>
+                <td><span class="atom fail">FAILED · FULL SCAN 2,400,000</span></td>
+                <td><button class="btn">View results</button></td>
+              </tr>
+              <tr>
+                <td class="tname"><a href="#f13" onclick="show('f13');return false">order_items</a></td>
+                <td class="r num">6,112,730</td>
+                <td class="r num">4</td>
+                <td><span class="atom pass">PASSED · FULL SCAN 6,112,730</span></td>
+                <td><button class="btn">View results</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================== F11 -->
+    <section class="screen" id="f11" aria-labelledby="f11h">
+      <div class="screen-head">
+        <h2 id="f11h">Review Queue</h2>
+        <span class="who">The domain expert's door — everything awaiting judgment, in business language. Budget: five minutes.</span>
+      </div>
+
+      <div class="epistemic">
+        Evidence is drawn from a sample of this table. A rule can be true of every row here and still be wrong — the machine checked the sample; only you can check the meaning.
+      </div>
+
+      <!-- Suggestion 1: proposed, expanded with EN|GE spread -->
+      <div class="card suggestion">
+        <div class="sg-head">
+          <span class="ctx-chip">orders · order_total</span>
+          <span class="atom proposed">PROPOSED · UNSAVED</span>
+          <span class="spacer"></span>
+          <span class="unsaved-note">Nothing is stored until a person accepts.</span>
+        </div>
+        <div class="sg-body">
+          <div class="evidence">0 of 512,000 sampled rows violate this&nbsp;·&nbsp;min observed 0.00&nbsp;·&nbsp;0 nulls</div>
+        </div>
+        <div class="spread">
+          <div class="pane en-pane">
+            <span class="eyebrow">Plain English</span>
+            <p class="stmt">Every order's <b>order_total</b> is 0.00 or greater — an order can never cost a negative amount.</p>
+          </div>
+          <div class="pane ge-pane">
+            <span class="eyebrow">Great Expectations</span>
+            <pre><span class="k">expect_column_values_to_be_between</span>
+  column:    order_total
+  min_value: 0
+  strict:    false</pre>
+          </div>
+        </div>
+        <div class="ge-note">compiled GE available — secondary in this view · <button class="btn" style="padding:2px 8px;font-size:11px">show</button></div>
+        <div class="sg-actions">
+          <button class="btn primary">Accept</button>
+          <button class="btn danger">Reject…</button>
+          <button class="btn">Ask business</button>
+        </div>
+      </div>
+
+      <!-- Suggestion 2: needs_review -->
+      <div class="card suggestion">
+        <div class="sg-head">
+          <span class="ctx-chip">orders · status</span>
+          <span class="atom nr">NEEDS REVIEW · UNSAVED</span>
+          <span class="spacer"></span>
+          <span class="unsaved-note">Flagged by the engineer — held out of bulk accept.</span>
+        </div>
+        <div class="sg-body">
+          <div class="evidence">4 distinct values in 512,000 sampled rows&nbsp;·&nbsp;shipped 61%&nbsp;·&nbsp;pending 24%&nbsp;·&nbsp;cancelled 9%&nbsp;·&nbsp;returned 6%</div>
+        </div>
+        <div class="spread">
+          <div class="pane en-pane">
+            <span class="eyebrow">Plain English</span>
+            <p class="stmt">An order's <b>status</b> is always one of: <i>shipped, pending, cancelled, returned</i>.</p>
+          </div>
+          <div class="pane ge-pane">
+            <span class="eyebrow">Great Expectations</span>
+            <pre><span class="k">expect_column_values_to_be_in_set</span>
+  column: status
+  value_set: [shipped, pending,
+              cancelled, returned]</pre>
+          </div>
+        </div>
+        <div class="ge-note">compiled GE available — secondary in this view · <button class="btn" style="padding:2px 8px;font-size:11px">show</button></div>
+        <p class="flag-note">Engineer's note: “this encodes a business assumption I can't verify — is there a status the sample missed?”</p>
+        <div class="sg-actions">
+          <button class="btn primary">Accept</button>
+          <button class="btn danger">Reject…</button>
+          <button class="btn">Ask business</button>
+        </div>
+      </div>
+
+      <!-- Currently failing accepted rule, needs judgment -->
+      <div class="card suggestion">
+        <div class="sg-head">
+          <span class="ctx-chip">payments · method</span>
+          <span class="atom fail">FAILING · SAMPLED 500,000 / 2,310,155</span>
+          <span class="spacer"></span>
+          <span class="unsaved-note">Accepted rule, now failing — does this violation matter?</span>
+        </div>
+        <div class="sg-body">
+          <div class="evidence">411 of 500,000 sampled rows violate&nbsp;·&nbsp;unexpected value “store_credit”</div>
+        </div>
+        <div class="spread">
+          <div class="pane en-pane">
+            <span class="eyebrow">Plain English</span>
+            <p class="stmt">A payment's <b>method</b> is one of: <i>card, paypal, bank_transfer, gift_card</i>. 411 payments say <b>store_credit</b> instead.</p>
+          </div>
+          <div class="pane ge-pane">
+            <span class="eyebrow">Great Expectations</span>
+            <pre><span class="k">expect_column_values_to_be_in_set</span>
+  column: method
+  value_set: [card, paypal,
+              bank_transfer, gift_card]</pre>
+          </div>
+        </div>
+        <div class="ge-note">compiled GE available — secondary in this view · <button class="btn" style="padding:2px 8px;font-size:11px">show</button></div>
+        <div class="sg-actions">
+          <button class="btn">This is a real defect</button>
+          <button class="btn">The rule is wrong — revise it…</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================== F12 -->
+    <section class="screen" id="f12" aria-labelledby="f12h">
+      <div class="screen-head">
+        <h2 id="f12h">Rules · orders</h2>
+        <span class="who">The translation desk — both users work here. English on the left, the compiled configuration on the right, always in sync.</span>
+      </div>
+
+      <div class="f12-grid">
+        <div>
+          <!-- NL authoring -->
+          <div class="card">
+            <div class="rule-row-head">
+              <span class="eyebrow">Write a rule in English</span>
+            </div>
+            <div class="nl-input-row">
+              <input type="text" value="order total can never be negative" aria-label="New rule in plain English">
+              <button class="btn primary">Translate</button>
+            </div>
+            <!-- successful translation preview -->
+            <div class="spread">
+              <div class="pane en-pane">
+                <span class="eyebrow">Plain English · as understood</span>
+                <p class="stmt">Every <b>order_total</b> in <b>orders</b> is 0.00 or greater.</p>
+              </div>
+              <div class="pane ge-pane">
+                <span class="eyebrow">Great Expectations · compiled</span>
+                <pre><span class="k">expect_column_values_to_be_between</span>
+  column:    order_total
+  min_value: 0</pre>
+              </div>
+            </div>
+            <div class="ge-note">compiled GE available — secondary in this view · <button class="btn" style="padding:2px 8px;font-size:11px">show</button></div>
+            <div class="sg-actions">
+              <span class="atom plain" title="Compiled means well-formed — not correct.">COMPILED OK</span>
+              <span class="compiled-hint">“Compiled” means well-formed, not right — the tool checks shape, never sense.</span>
+              <span class="spacer" style="flex:1"></span>
+              <button class="btn primary">Save rule</button>
+              <span class="unsaved-note">unsaved until you confirm</span>
+            </div>
+          </div>
+
+          <!-- rejected NL input -->
+          <div class="card reject-card" style="margin-top:14px">
+            <div class="reject-inner">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <span class="atom fail">REJECTED · NOT STORED</span>
+                <span class="attempt">shipped date must be after order date</span>
+              </div>
+              <p class="reason"><b>Not supported yet</b> — this rule compares two columns (<span style="font-family:var(--mono);font-size:12px">shipped_date</span> ↔ <span style="font-family:var(--mono);font-size:12px">order_date</span>), and the current catalog covers single-column and table-level checks only.</p>
+              <span class="not-stored">nothing was stored · coverage unchanged · catalog: 15 types, all single-column or table-level</span>
+            </div>
+          </div>
+
+          <!-- bulk accept -->
+          <div class="card bulk">
+            <div class="bulk-head">
+              <span class="eyebrow">Bulk accept · a verification act</span>
+              <span class="cap-note">Capped at <b>8 proposals per act</b> so every evidence line fits on screen. Read each line — accepting is vouching. <b>needs_review</b> is excluded.</span>
+            </div>
+            <ul class="bulk-list">
+              <li>
+                <input type="checkbox" checked aria-label="Select proposal 1">
+                <span class="b-stmt">order_id is unique across all orders</span>
+                <span class="atom plain">COMPILED OK</span>
+                <span class="evidence">0 duplicates in 512,000 sampled rows</span>
+              </li>
+              <li>
+                <input type="checkbox" checked aria-label="Select proposal 2">
+                <span class="b-stmt">order_total is 0.00 or greater</span>
+                <span class="atom plain">COMPILED OK</span>
+                <span class="evidence">0 of 512,000 sampled rows violate · min observed 0.00</span>
+              </li>
+              <li>
+                <input type="checkbox" checked aria-label="Select proposal 3">
+                <span class="b-stmt">customer_id is never null</span>
+                <span class="atom plain">COMPILED OK</span>
+                <span class="evidence">0 nulls in 512,000 sampled rows</span>
+              </li>
+              <li>
+                <input type="checkbox" checked aria-label="Select proposal 4">
+                <span class="b-stmt">order_date is a valid date, never in the future</span>
+                <span class="atom plain">COMPILED OK</span>
+                <span class="evidence">max observed 2026-08-15 · 0 of 512,000 sampled rows violate</span>
+              </li>
+              <li>
+                <input type="checkbox" checked aria-label="Select proposal 5">
+                <span class="b-stmt">currency has exactly 3 characters</span>
+                <span class="atom plain">COMPILED OK</span>
+                <span class="evidence">3 distinct values (USD, EUR, GBP) in 512,000 sampled rows</span>
+              </li>
+              <li class="excluded">
+                <input type="checkbox" disabled aria-label="Excluded from bulk selection">
+                <span class="b-stmt">status is always one of {shipped, pending, cancelled, returned}</span>
+                <span class="atom nr">NEEDS REVIEW</span>
+                <span class="excl-why">excluded from bulk — encodes a business assumption; route to the domain expert.</span>
+              </li>
+            </ul>
+            <div class="bulk-foot">
+              <button class="btn primary">Accept 5 — I have read each evidence line</button>
+              <span class="count num">5 of 8 max selected · 1 excluded (needs_review)</span>
+            </div>
+          </div>
+
+          <p class="mutability-note">Rules are not edited in place. “Propose revision” drafts a new version beside the old one; the stored rule changes only when the revision is accepted. Rejections keep their reason forever.</p>
+        </div>
+
+        <!-- catalog rail -->
+        <div class="card catalog">
+          <div class="catalog-head">
+            <span class="eyebrow">Expectation catalog</span>
+            <span style="font-size:11px;color:var(--muted)">The whole menu — 15 curated GE types. The translator may not leave it.</span>
+          </div>
+          <ul class="catalog-list">
+            <li class="on">expect_column_values_to_not_be_null</li>
+            <li class="on">expect_column_values_to_be_between</li>
+            <li class="on">expect_column_values_to_be_in_set</li>
+            <li>expect_column_values_to_not_be_in_set</li>
+            <li class="on">expect_column_values_to_be_unique</li>
+            <li>expect_column_values_to_match_regex</li>
+            <li>expect_column_values_to_not_match_regex</li>
+            <li>expect_column_values_to_be_of_type</li>
+            <li>expect_column_value_lengths_to_be_between</li>
+            <li>expect_column_values_to_match_strftime_format</li>
+            <li>expect_column_min_to_be_between</li>
+            <li>expect_column_max_to_be_between</li>
+            <li>expect_column_mean_to_be_between</li>
+            <li>expect_table_row_count_to_be_between</li>
+            <li>expect_table_columns_to_match_set</li>
+          </ul>
+          <div class="catalog-foot">● in use on this table</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================== F13 -->
+    <section class="screen" id="f13" aria-labelledby="f13h">
+      <div class="screen-head">
+        <h2 id="f13h">Results</h2>
+        <span class="who">Rendered from persisted run records — never from the request. A synchronous run is just a record that completed while you watched.</span>
+      </div>
+
+      <!-- Record 1: orders, completed, failures -->
+      <div class="card record">
+        <div class="rec-head">
+          <span class="rec-id">run_0492</span>
+          <span class="ctx-chip">orders</span>
+          <span class="atom fail">FAILED · FULL SCAN 2,400,000</span>
+          <span class="rec-meta">persisted 2026-08-16 14:32:08 UTC · 6 rules · 41.2s</span>
+          <span class="spacer"></span>
+          <button class="btn">Re-run → new record</button>
+        </div>
+
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom fail">FAILED · FULL SCAN 2,400,000</span>
+            <span class="stmt">Every order's <b>order_total</b> is 0.00 or greater.</span>
+          </div>
+          <div class="viol num"><b>23 orders</b> have a negative order_total <span class="pct">· of 2,400,000 rows scanned · 0.001%</span> · <span class="vals">#88231&nbsp;−450.00&nbsp;&nbsp;#90112&nbsp;−12.99&nbsp;&nbsp;#91455&nbsp;−3.10&nbsp;&nbsp;#93008&nbsp;−1,204.50&nbsp;&nbsp;…</span></div>
+          <details class="raw">
+            <summary>raw framework output</summary>
+            <pre>{"expectation_type": "expect_column_values_to_be_between",
+ "success": false,
+ "result": {"element_count": 2400000, "unexpected_count": 23,
+            "unexpected_percent": 0.000958,
+            "partial_unexpected_list": [-450.00, -12.99, -3.10, -1204.50]}}</pre>
+          </details>
+        </div>
+
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom fail">FAILED · FULL SCAN 2,400,000</span>
+            <span class="stmt">An order's <b>status</b> is one of <i>shipped, pending, cancelled, returned</i>.</span>
+          </div>
+          <div class="viol num"><b>112 orders</b> carry a fifth value <span class="pct">· 0.005%</span> · <span class="vals">“refunded” ×112</span> <span class="pct">— the sample never contained it; the full table does.</span></div>
+          <details class="raw"><summary>raw framework output</summary>
+            <pre>{"expectation_type": "expect_column_values_to_be_in_set", "success": false,
+ "result": {"unexpected_count": 112, "partial_unexpected_list": ["refunded"]}}</pre>
+          </details>
+        </div>
+
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom pass">PASSED · FULL SCAN 2,400,000</span>
+            <span class="stmt"><b>order_id</b> is unique across all orders.</span>
+          </div>
+        </div>
+
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom fail">ERRORED · RULE COULD NOT RUN</span>
+            <span class="stmt"><b>signup_channel</b> is never null.</span>
+          </div>
+          <div class="viol"><span class="pct">column “signup_channel” no longer exists on orders — no verdict was produced. The rule needs revision, not the data.</span></div>
+        </div>
+
+        <div class="result-row">
+          <span class="rec-note">Run records are immutable — there is nothing to edit on this screen. Re-running writes a new record; this one stays as evidence.</span>
+        </div>
+      </div>
+
+      <!-- Record 2: payments, passed but sampled -->
+      <div class="card record">
+        <div class="rec-head">
+          <span class="rec-id">run_0491</span>
+          <span class="ctx-chip">payments</span>
+          <span class="atom warn">PASSED · SAMPLED 500,000 / 2,310,155</span>
+          <span class="rec-meta">persisted 2026-08-16 14:19:44 UTC · 5 rules · 12.8s · row cap engaged</span>
+          <span class="spacer"></span>
+          <button class="btn">Re-run → new record</button>
+        </div>
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom warn">PASSED · SAMPLED 500,000 / 2,310,155</span>
+            <span class="stmt">A payment's <b>amount</b> is greater than 0.</span>
+          </div>
+          <div class="viol"><span class="pct">true of every sampled row — 1,810,155 rows were never read. This table stays in the “unverifiable” bucket until a full scan completes.</span></div>
+        </div>
+      </div>
+
+      <!-- Record 3: shipments, errored -->
+      <div class="card record">
+        <div class="rec-head">
+          <span class="rec-id">run_0489</span>
+          <span class="ctx-chip">shipments</span>
+          <span class="atom fail">ERRORED · RULE COULD NOT RUN</span>
+          <span class="rec-meta">persisted 2026-08-16 13:58:02 UTC · 2 rules · 3.1s</span>
+          <span class="spacer"></span>
+          <button class="btn">Re-run → new record</button>
+        </div>
+        <div class="result-row">
+          <div class="rr-top">
+            <span class="atom fail">ERRORED · RULE COULD NOT RUN</span>
+            <span class="stmt"><b>carrier</b> is one of <i>ups, fedex, dhl, usps</i>.</span>
+          </div>
+          <div class="viol"><span class="pct">connection to replica dropped mid-scan — no verdict exists. An error is not a pass and not a fail.</span></div>
+        </div>
+      </div>
+
+      <!-- Record 4: customers, running -->
+      <div class="card record">
+        <div class="rec-head">
+          <span class="rec-id">run_0493</span>
+          <span class="ctx-chip">customers</span>
+          <span class="atom info"><span class="running-pulse"></span>RUNNING · STARTED 14:35:10 UTC</span>
+          <span class="rec-meta">3 rules queued · this row is the record, refreshed — “running” is just another status value</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+    ['f10','f11','f12','f13'].forEach(k => {
+      document.getElementById('tab-' + k).setAttribute('aria-selected', String(k === id));
+    });
+  }
+  function setRole(r) {
+    const expert = (r === 'exp');
+    document.body.classList.toggle('expert', expert);
+    document.getElementById('role-eng').setAttribute('aria-pressed', String(!expert));
+    document.getElementById('role-exp').setAttribute('aria-pressed', String(expert));
+    show(expert ? 'f11' : 'f10');  /* each role has its own door */
+  }
+</script>
