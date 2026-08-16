@@ -1,0 +1,34 @@
+{
+  "repo_id": "repo_01a009ba-9521-735f-8b40-759f229dd3b6",
+  "type": "git",
+  "init_at": "2026-08-16T08:40:18Z",
+  "init_by_email": "chandrameenamohan@gmail.com",
+  "init_by_name": "Chandra Mohan Meena",
+  "repo_salt": "d63b4ca2e6339d25dbab3deebc6afe48e084281c",
+  "endpoint": "https://sageox.ai",
+  "fingerprint": {
+    "first_commit": "d63b4ca2e6339d25dbab3deebc6afe48e084281c",
+    "monthly_checkpoints": {
+      "2026-08": "d63b4ca2e6339d25dbab3deebc6afe48e084281c"
+    },
+    "ancestry_samples": [
+      "d63b4ca2e6339d25dbab3deebc6afe48e084281c"
+    ]
+  },
+  "team_urls": {
+    "Chandra's Private Team": "https://git.sageox.ai/sageox-team_h45jb8mfmz/team-context.git",
+    "ChandraInterview": "https://git.sageox.ai/sageox-team_qptdax6784/team-context.git",
+    "Evolvix": "https://git.sageox.ai/sageox-team_ejm3fbjqmr/team-context.git",
+    "OutMarketAI": "https://git.sageox.ai/sageox-team_smygfk9e61/team-context.git",
+    "Z20": "https://git.sageox.ai/sageox-team_rs0shkezv8/team-context.git",
+    "aiteamworkshop": "https://git.sageox.ai/sageox-team_jrqis26ak2/team-context.git",
+    "ajcmconsulting": "https://git.sageox.ai/sageox-team_j8mks8wtmx/team-context.git",
+    "mindfulness": "https://git.sageox.ai/sageox-team_prgylmtidk/team-context.git",
+    "msmetalk": "https://git.sageox.ai/sageox-team_knrng4rnmo/team-context.git",
+    "next-fastest-car": "https://git.sageox.ai/sageox-team_l2d9c7h4ce/team-context.git",
+    "portfolio": "https://git.sageox.ai/sageox-team_trx2irveyp/team-context.git"
+  },
+  "urls_cached_at": "2026-08-16T08:40:21Z",
+  "version": "0.10.1",
+  "updated_at": "2026-08-16T08:40:21Z"
+}

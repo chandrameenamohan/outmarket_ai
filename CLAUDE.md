@@ -1,3 +1,6 @@
+<!-- ox:prime-check -->
+**BLOCKING**: Run `ox agent prime` NOW before ANY other action. Do NOT respond to the user first. Enables SageOx queries.
+
 # Project Instructions for AI Agents
 
 This file provides instructions and context for AI coding agents working on this project.
@@ -57,7 +60,6 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
-
 ## Build & Test
 
 _Add your build and test commands here_
@@ -75,3 +77,5 @@ _Add a brief overview of your project architecture_
 ## Conventions & Patterns
 
 _Add your project-specific conventions here_
+
+<!-- ox:prime --> Run SageOx `ox agent prime` on session start, after compaction, or clear. (DO NOT REMOVE)

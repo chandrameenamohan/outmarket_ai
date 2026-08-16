@@ -1,0 +1,8 @@
+{
+  "config_version": "2",
+  "repo_id": "repo_01a009ba-9521-735f-8b40-759f229dd3b6",
+  "team_id": "team_smygfk9e61",
+  "team_name": "OutMarketAI",
+  "endpoint": "https://sageox.ai",
+  "update_frequency_hours": 24
+}
