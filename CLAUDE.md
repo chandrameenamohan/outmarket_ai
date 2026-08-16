@@ -5,6 +5,19 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+## ▶ Start here, every session
+
+**Read [`HANDOFF.md`](./HANDOFF.md) before doing anything else.** It carries what is done,
+what is next, the decisions already made (do not re-litigate them), the findings so far,
+and the environment gotchas that have already cost time.
+
+Then run `bd ready` for the current work queue.
+
+Key context in one line: this is a graded take-home (`QAFD.pdf`) built with the author's own
+workflow in `software_development_workflow.md` — **FULL tier, with the autonomous loop
+deliberately omitted and the deterministic gate kept**. `SPEC.md` is written but **not frozen**:
+it is blocked on the learning tests in `learning-tests/`.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 

@@ -31,3 +31,10 @@ if command -v bd >/dev/null 2>&1; then
   if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
 fi
 # --- END BEADS INTEGRATION v1.2.2 ---
+
+# ox pre-push hook
+# records PR + issue linkage for the active recording from the pushed range
+if command -v ox >/dev/null 2>&1; then
+  ox hooks pre-push --remote "${1:-}" --url "${2:-}" 2>/dev/null || true
+fi
+# end ox hook
