@@ -1,0 +1,773 @@
+<title>Run Ledger</title>
+<style>
+  /* ============ TOKENS — light is the native theme (light-first) ============ */
+  :root {
+    --paper:      #FBFAF7;   /* page ground — off-white, cooler than cream */
+    --paper-2:    #F1EFE8;   /* recessed field: inputs, collapsed panels   */
+    --ink:        #1D1B17;   /* printed ink                                */
+    --ink-soft:   #6E6A60;   /* secondary ink                              */
+    --ink-faint:  #A5A197;   /* tertiary ink: folio marks, disabled        */
+    --blue:       #234E8A;   /* ledger blue: verified stamps, interaction  */
+    --red:        #A02C20;   /* oxide stamp red: FAILED / ERRORED          */
+    --hold:       #8A6410;   /* hold ochre: NEEDS REVIEW                   */
+    --blue-wash:  #EAEEF5;   /* faint blue field behind selected rows      */
+    --red-wash:   #F6ECEA;   /* faint red field behind rejection notices   */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #16150F;
+      --paper-2:    #201E17;
+      --ink:        #E9E5DB;
+      --ink-soft:   #9B968A;
+      --ink-faint:  #6B6659;
+      --blue:       #82A6DC;
+      --red:        #D9705F;
+      --hold:       #C9A24B;
+      --blue-wash:  #1C2431;
+      --red-wash:   #2C1D1A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #16150F;
+    --paper-2:    #201E17;
+    --ink:        #E9E5DB;
+    --ink-soft:   #9B968A;
+    --ink-faint:  #6B6659;
+    --blue:       #82A6DC;
+    --red:        #D9705F;
+    --hold:       #C9A24B;
+    --blue-wash:  #1C2431;
+    --red-wash:   #2C1D1A;
+  }
+
+  /* ============ TYPE ROLES ============
+     serif = meaning (statements, prose)   mono = record (ids, counts, stamps) */
+  :root {
+    --serif: "Charter", "Iowan Old Style", "Palatino", "Georgia", serif;
+    --mono: ui-monospace, "SF Mono", "Menlo", "Cascadia Mono", "Consolas", monospace;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0;
+  }
+  .sheet { max-width: 1060px; margin: 0 auto; padding: 40px 28px 120px; }
+
+  a { color: var(--blue); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  /* ============ RECURRING PIECES ============ */
+  .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 400;
+  }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num  { font-variant-numeric: tabular-nums; }
+
+  /* Stamped status token — ONE atom. Sampling & error state live INSIDE it. */
+  .stamp {
+    display: inline-block;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .07em;
+    text-transform: uppercase; font-weight: 700;
+    padding: 3px 9px 2px; border: 1.5px solid currentColor; border-radius: 2px;
+    white-space: nowrap;
+  }
+  .stamp-pass  { color: var(--blue); }
+  .stamp-fail  { color: var(--red); }
+  .stamp-hold  { color: var(--hold); }
+  .stamp-plain { color: var(--ink-soft); }           /* neutral: COMPILED, RUNNING, PROPOSED */
+  .stamp-none  { color: var(--ink-faint); border-style: dashed; font-weight: 400; }
+
+  /* Evidence line — always mono, always prefixed */
+  .evidence {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums; line-height: 1.6;
+  }
+  .evidence::before { content: "EVIDENCE  "; letter-spacing: .1em; color: var(--ink-faint); font-size: 10.5px; }
+
+  /* ============ MASTHEAD ============ */
+  .masthead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 28px; margin-bottom: 8px; }
+  .wordmark {
+    font-family: var(--mono); font-size: 21px; font-weight: 700;
+    letter-spacing: .18em; text-transform: uppercase; margin: 0;
+  }
+  .tagline { font-style: italic; color: var(--ink-soft); font-size: 15px; }
+
+  /* ============ ROLE DOORS — role is a view you select, not an account ===== */
+  .doors { margin: 26px 0 6px; }
+  .doors .label { display:block; margin-bottom: 10px; }
+  .door-row { display: flex; flex-wrap: wrap; gap: 14px; }
+  .door {
+    flex: 1 1 300px; text-align: left; background: var(--paper-2);
+    border: 1.5px solid transparent; border-radius: 2px;
+    padding: 14px 18px; color: var(--ink);
+  }
+  .door[aria-pressed="true"] { border-color: var(--ink); background: var(--paper); }
+  .door b { font-family: var(--mono); font-size: 12px; letter-spacing: .09em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  .door span { color: var(--ink-soft); font-size: 14px; font-style: italic; }
+  .door-note { font-size: 13px; color: var(--ink-soft); margin-top: 10px; font-style: italic; }
+
+  /* ============ NAV — index tabs of the book ============ */
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 0; }
+  nav.tabs button {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase;
+    background: none; border: none; color: var(--ink-soft);
+    padding: 8px 14px 7px; border-radius: 2px;
+  }
+  nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--paper); font-weight: 700; }
+
+  /* ============ FOLIO (per-screen header) ============ */
+  section.screen { display: none; padding-top: 46px; }
+  section.screen.open { display: block; }
+  .folio-mark { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--ink-faint); text-transform: uppercase; }
+  h1.folio { font-size: 30px; line-height: 1.15; margin: 6px 0 10px; font-weight: 700; text-wrap: balance; }
+  .folio-sub { color: var(--ink-soft); max-width: 62ch; margin: 0 0 34px; }
+
+  h2.bucket {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink); margin: 44px 0 4px; font-weight: 700;
+  }
+  h2.bucket .roman { color: var(--ink-faint); margin-right: 10px; }
+  .bucket-note { font-size: 13.5px; font-style: italic; color: var(--ink-soft); margin: 0 0 18px; max-width: 68ch; }
+
+  /* ============ LEDGER TABLES — hairline-free: weight & space only ========= */
+  .scroll { overflow-x: auto; }
+  table.ledger { border-collapse: collapse; width: 100%; min-width: 720px; }
+  table.ledger th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 400; text-align: left; padding: 0 22px 10px 0;
+  }
+  table.ledger td { padding: 11px 22px 11px 0; vertical-align: baseline; }
+  table.ledger td.tname { font-family: var(--mono); font-weight: 700; font-size: 14px; }
+  table.ledger td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--ink-soft); }
+  table.ledger td:last-child, table.ledger th:last-child { padding-right: 0; }
+
+  /* ============ ENTRIES (review queue, proposals, clauses, run records) ==== */
+  .entry { display: grid; grid-template-columns: 64px 1fr; gap: 0 20px; padding: 22px 0; }
+  .entry + .entry { margin-top: 6px; }
+  .entry .eno { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); padding-top: 5px; letter-spacing: .05em; }
+  .entry .statement { font-size: 18px; line-height: 1.45; margin: 0 0 6px; }
+  .entry .ctx { font-size: 13px; color: var(--ink-soft); font-style: italic; margin: 0 0 8px; }
+  .entry .meta-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-top: 10px; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .act {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
+    border: 1.5px solid var(--ink); background: none; color: var(--ink);
+    padding: 6px 14px; border-radius: 2px;
+  }
+  .act.primary { background: var(--ink); color: var(--paper); font-weight: 700; }
+  .act.quiet { border-color: var(--ink-faint); color: var(--ink-soft); }
+  .act:disabled { border-color: var(--ink-faint); color: var(--ink-faint); cursor: not-allowed; }
+
+  /* Static epistemic header on the review queue */
+  .caveat {
+    background: var(--paper-2); border-radius: 2px; padding: 18px 22px; margin: 0 0 30px;
+    font-size: 16.5px; font-style: italic; max-width: 74ch;
+  }
+  .caveat .label { display: block; margin-bottom: 6px; font-style: normal; }
+
+  /* Rejection notice */
+  .reject-box { background: var(--red-wash); border-radius: 2px; padding: 18px 22px; margin-top: 14px; }
+  .reject-box p { margin: 8px 0 0; max-width: 68ch; }
+
+  /* NL input */
+  .nl-input {
+    width: 100%; box-sizing: border-box; font-family: var(--serif); font-size: 17px;
+    background: var(--paper-2); color: var(--ink); border: none; border-radius: 2px;
+    padding: 14px 16px;
+  }
+  .nl-hint { font-size: 13px; color: var(--ink-soft); font-style: italic; margin-top: 8px; }
+
+  /* Catalog menu */
+  .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 26px; margin-top: 14px; }
+  .catalog span { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); padding: 3px 0; }
+  .catalog span b { color: var(--ink); font-weight: 700; }
+
+  /* Bulk-accept list */
+  .bulk-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 0 16px; align-items: start; padding: 15px 8px 15px 4px; border-radius: 2px; }
+  .bulk-row.selected { background: var(--blue-wash); }
+  .bulk-row.held { opacity: .95; }
+  .bulk-row input[type=checkbox] { width: 17px; height: 17px; margin-top: 5px; accent-color: var(--blue); }
+  .bulk-row .statement { font-size: 16.5px; margin: 0 0 4px; }
+  .bulk-bar {
+    margin-top: 20px; padding: 16px 18px; background: var(--paper-2); border-radius: 2px;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+  }
+  .bulk-bar .why { font-size: 13.5px; font-style: italic; color: var(--ink-soft); max-width: 56ch; }
+
+  /* GE config, raw output */
+  details.paperclip { margin-top: 12px; }
+  details.paperclip summary {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); cursor: pointer; list-style: none;
+  }
+  details.paperclip summary::before { content: "▸ "; }
+  details.paperclip[open] summary::before { content: "▾ "; }
+  details.paperclip pre {
+    background: var(--paper-2); border-radius: 2px; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; margin: 10px 0 0;
+  }
+
+  /* Run record detail */
+  .record-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px 30px; margin: 22px 0 8px; }
+  .record-head .cell .label { display: block; margin-bottom: 3px; }
+  .record-head .cell .v { font-family: var(--mono); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .bigstamp { font-size: 13px; padding: 6px 14px 5px; }
+
+  .clause-result { display: grid; grid-template-columns: 48px 1fr; gap: 0 18px; padding: 16px 0; }
+  .clause-result .eno { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); padding-top: 4px; }
+  .clause-result .statement { font-size: 16.5px; margin: 0 0 5px; }
+  .offenders { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-top: 6px; line-height: 1.7; }
+  .offenders b { color: var(--red); font-weight: 700; }
+
+  .immutability { font-size: 13.5px; font-style: italic; color: var(--ink-soft); margin-top: 26px; max-width: 66ch; }
+
+  .footnote { margin-top: 80px; font-size: 12.5px; color: var(--ink-faint); font-style: italic; }
+
+  @media (max-width: 640px) {
+    .entry { grid-template-columns: 1fr; }
+    .entry .eno { padding-top: 0; }
+    h1.folio { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stamp-running-dot { animation: tick 1.6s steps(2) infinite; }
+    @keyframes tick { 50% { opacity: .25; } }
+  }
+</style>
+
+<div class="sheet">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="masthead">
+    <h1 class="wordmark">Run Ledger</h1>
+    <span class="tagline">Data quality, kept as a book of record.</span>
+  </header>
+  <div class="label mono">acme-commerce · supabase postgresql · schema public · read-only role</div>
+
+  <!-- ============ ROLE DOORS ============ -->
+  <div class="doors">
+    <span class="label">Choose how you enter — a view, not an account. Remembered on this device.</span>
+    <div class="door-row" role="group" aria-label="Role selection">
+      <button class="door" id="door-eng" aria-pressed="true">
+        <b>Engineer</b>
+        <span>Owns coverage and execution. Enters at the Table Explorer: where is coverage missing, what did the last run prove.</span>
+      </button>
+      <button class="door" id="door-dx" aria-pressed="false">
+        <b>Domain expert</b>
+        <span>Owns whether a rule means the right thing. Enters at the Review Queue: everything awaiting judgment, stated in English, no schema knowledge required.</span>
+      </button>
+    </div>
+    <p class="door-note" id="door-note">Viewing as engineer — full ledger, table-first.</p>
+  </div>
+
+  <!-- ============ NAV ============ -->
+  <nav class="tabs" role="tablist" aria-label="Screens">
+    <button role="tab" aria-selected="true"  data-screen="f10">F10 · Table Explorer</button>
+    <button role="tab" aria-selected="false" data-screen="f11">F11 · Review Queue</button>
+    <button role="tab" aria-selected="false" data-screen="f12">F12 · Rules</button>
+    <button role="tab" aria-selected="false" data-screen="f13">F13 · Run Records</button>
+  </nav>
+
+  <!-- ================================================================
+       F10 · TABLE EXPLORER
+       ================================================================ -->
+  <section class="screen open" id="f10">
+    <div class="folio-mark">Folio F10 · engineer's door</div>
+    <h1 class="folio">Table Explorer</h1>
+    <p class="folio-sub">Sorted by <em>unverified</em>, not by uncovered. A table whose last run errored or was
+    row-capped has not been vouched for either — it files above the fold, never under “has coverage.”</p>
+
+    <h2 class="bucket"><span class="roman">I</span>Never run</h2>
+    <p class="bucket-note">No run record exists. Nothing is known.</p>
+    <div class="scroll">
+      <table class="ledger">
+        <thead><tr><th>Table</th><th>Rows</th><th>Accepted rules</th><th>Last run — from its record</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="tname">order_items</td><td class="n">6,182,340</td><td class="n">0</td>
+            <td><span class="stamp stamp-none">No record</span></td>
+            <td><a href="#f12">Open rules →</a></td>
+          </tr>
+          <tr>
+            <td class="tname">shipments</td><td class="n">1,204,556</td><td class="n">0</td>
+            <td><span class="stamp stamp-none">No record</span></td>
+            <td><a href="#f12">Open rules →</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="bucket"><span class="roman">II</span>Ran, but unverifiable</h2>
+    <p class="bucket-note">A record exists but vouches for nothing: the run errored, or it saw only a sample.
+    These never count as covered.</p>
+    <div class="scroll">
+      <table class="ledger">
+        <thead><tr><th>Table</th><th>Rows</th><th>Accepted rules</th><th>Last run — from its record</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="tname">orders</td><td class="n">2,400,000</td><td class="n">5</td>
+            <td><span class="stamp stamp-fail">Failed · sampled 500K / 2.4M</span>
+                &nbsp;<span class="mono" style="font-size:12px;color:var(--ink-faint)">R-0142</span></td>
+            <td><a href="#f13">Open record →</a></td>
+          </tr>
+          <tr>
+            <td class="tname">payments</td><td class="n">2,391,876</td><td class="n">4</td>
+            <td><span class="stamp stamp-fail">Errored · rule could not run</span>
+                &nbsp;<span class="mono" style="font-size:12px;color:var(--ink-faint)">R-0139</span></td>
+            <td><a href="#f13">Open record →</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="bucket"><span class="roman">III</span>Verified</h2>
+    <p class="bucket-note">Full scan, completed. The record vouches for every row.</p>
+    <div class="scroll">
+      <table class="ledger">
+        <thead><tr><th>Table</th><th>Rows</th><th>Accepted rules</th><th>Last run — from its record</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="tname">customers</td><td class="n">84,210</td><td class="n">6</td>
+            <td><span class="stamp stamp-pass">Passed · all 84,210 rows</span>
+                &nbsp;<span class="mono" style="font-size:12px;color:var(--ink-faint)">R-0141</span></td>
+            <td><a href="#f13">Open record →</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================================================================
+       F11 · REVIEW QUEUE
+       ================================================================ -->
+  <section class="screen" id="f11">
+    <div class="folio-mark">Folio F11 · domain expert's door</div>
+    <h1 class="folio">Review Queue</h1>
+    <p class="folio-sub">Everything awaiting your judgment, in business language. Table names appear as context,
+    never as navigation. Budget: about five minutes per table.</p>
+
+    <div class="caveat">
+      <span class="label">What this evidence cannot tell you</span>
+      Evidence is drawn from a sample of this table. A rule can be true of every row here and still be wrong —
+      the sample shows what the data <em>does</em>, not what it <em>should</em> do. That judgment is yours.
+    </div>
+
+    <div class="entry">
+      <div class="eno">Q-1</div>
+      <div>
+        <p class="statement">Order status is always one of: <em>shipped, pending, cancelled, returned</em>.</p>
+        <p class="ctx">About the orders table — shown for context only. Flagged by the engineer: “encodes a business
+        assumption I can't verify.”</p>
+        <div class="evidence">0 of 512,000 sampled rows violate this · 4 distinct values observed · 2,400,000 rows in table</div>
+        <div class="meta-row">
+          <span class="stamp stamp-hold">Needs review · unsaved until accepted</span>
+        </div>
+        <div class="actions">
+          <button class="act primary">Accept</button>
+          <button class="act">Reject — with reason</button>
+          <button class="act quiet">Ask the engineer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="eno">Q-2</div>
+      <div>
+        <p class="statement">A customer's email address is present on at least 99.5% of records.</p>
+        <p class="ctx">About the customers table — shown for context only. AI-suggested from the profile.</p>
+        <div class="evidence">412 of 84,210 rows have no email (0.49%) · full scan · threshold proposed from observed rate</div>
+        <div class="meta-row">
+          <span class="stamp stamp-plain">Proposed · unsaved until accepted</span>
+        </div>
+        <div class="actions">
+          <button class="act primary">Accept</button>
+          <button class="act">Reject — with reason</button>
+          <button class="act quiet">Ask the engineer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="eno">Q-3</div>
+      <div>
+        <p class="statement">An order's total is never negative — <strong>currently failing.</strong></p>
+        <p class="ctx">About the orders table — shown for context only. This rule is accepted and in force;
+        its latest run found violations. Does the failure matter?</p>
+        <div class="evidence">23 of 500,000 sampled rows violate · e.g. order #88231 at −450.00 · from run record R-0142</div>
+        <div class="meta-row">
+          <span class="stamp stamp-fail">Failed · sampled 500K / 2.4M</span>
+          <a href="#f13" class="mono" style="font-size:12px">View run record R-0142 →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="eno">Q-4</div>
+      <div>
+        <p class="statement">Every payment amount is between 0.00 and 25,000.00.</p>
+        <p class="ctx">About the payments table — shown for context only. AI-suggested from the profile.</p>
+        <div class="evidence">0 of 480,000 sampled rows violate this · min observed 0.00 · max observed 24,310.55</div>
+        <div class="meta-row">
+          <span class="stamp stamp-plain">Proposed · unsaved until accepted</span>
+        </div>
+        <div class="actions">
+          <button class="act primary">Accept</button>
+          <button class="act">Reject — with reason</button>
+          <button class="act quiet">Ask the engineer</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================
+       F12 · RULE MANAGEMENT
+       ================================================================ -->
+  <section class="screen" id="f12">
+    <div class="folio-mark">Folio F12 · both users</div>
+    <h1 class="folio">Rules — orders</h1>
+    <p class="folio-sub">Rules are written in English first; the compiled configuration is the carbon copy underneath.
+    Accepting is a verification act. Amending is a deliberate one.</p>
+
+    <!-- Natural-language authoring -->
+    <h2 class="bucket"><span class="roman">I</span>State a rule in English</h2>
+    <input class="nl-input" type="text" value="shipped date must be after order date" aria-label="Rule in plain English" />
+    <p class="nl-hint">The system drafts a rule only from the fifteen check types below. What it can't express, it refuses — with the reason.</p>
+
+    <div class="reject-box">
+      <span class="stamp stamp-fail">Rejected · nothing stored</span>
+      <p><strong>Not supported yet</strong> — this rule compares two columns (<span class="mono">shipped_date</span>,
+      <span class="mono">order_date</span>), and the current rule set covers single-column and table-level checks only.
+      Nothing was saved; coverage is unchanged. Multi-column checks are the first planned addition.</p>
+    </div>
+
+    <div class="entry" style="margin-top:26px">
+      <div class="eno">DRAFT</div>
+      <div>
+        <p class="ctx" style="margin-bottom:6px">Your previous input — <em>“order total can never be negative”</em> — drafted this rule:</p>
+        <p class="statement">An order's total is 0.00 or more.</p>
+        <div class="evidence">column order_total · check type: value between · lower bound 0, no upper bound</div>
+        <div class="meta-row">
+          <span class="stamp stamp-plain">Compiled · shape OK</span>
+          <span style="font-size:13px;font-style:italic;color:var(--ink-soft)">Compiling proves the rule is well-formed — never that it is right. The engine accepts nonsense that parses.</span>
+        </div>
+        <details class="paperclip">
+          <summary>Great Expectations configuration — the carbon copy</summary>
+<pre>expect_column_values_to_be_between:
+  column: order_total
+  min_value: 0
+  max_value: null
+  strict_min: false</pre>
+        </details>
+        <div class="actions">
+          <button class="act primary">Save as accepted — a deliberate act</button>
+          <button class="act quiet">Discard draft</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Catalog -->
+    <h2 class="bucket"><span class="roman">II</span>The menu — fifteen check types, curated</h2>
+    <p class="bucket-note">Every rule in this book, suggested or typed, is drawn from this list. A rule outside it
+    cannot be stored — that is a defect, not a feature request.</p>
+    <div class="catalog">
+      <span><b>not be null</b> — column is always present</span>
+      <span><b>be between</b> — numeric or date bounds</span>
+      <span><b>be in set</b> — value from a fixed list</span>
+      <span><b>not be in set</b> — value never from a list</span>
+      <span><b>be unique</b> — no duplicates in column</span>
+      <span><b>match regex</b> — text fits a pattern</span>
+      <span><b>not match regex</b> — text avoids a pattern</span>
+      <span><b>match strftime</b> — date string fits a format</span>
+      <span><b>value lengths between</b> — text length bounds</span>
+      <span><b>be of type</b> — column has expected type</span>
+      <span><b>mean between</b> — column average in bounds</span>
+      <span><b>distinct in set</b> — no unexpected categories</span>
+      <span><b>most common in set</b> — dominant value expected</span>
+      <span><b>row count between</b> — table size in bounds</span>
+      <span><b>column to exist</b> — schema still has the column</span>
+    </div>
+
+    <!-- Bulk accept -->
+    <h2 class="bucket"><span class="roman">III</span>Proposals awaiting acceptance — 4</h2>
+    <p class="bucket-note">Bulk acceptance is capped at ten, and every selected proposal's evidence stays on screen
+    at the moment you click — you are verifying a short list, not dismissing a count. Anything held for review is
+    excluded from bulk selection.</p>
+
+    <div class="bulk-row selected">
+      <input type="checkbox" checked aria-label="Select: order id is unique" />
+      <div>
+        <p class="statement">Every order has a unique order ID.</p>
+        <div class="evidence">0 duplicates in 512,000 sampled rows · 512,000 distinct of 512,000 sampled</div>
+      </div>
+      <span class="stamp stamp-plain">Proposed</span>
+    </div>
+    <div class="bulk-row selected">
+      <input type="checkbox" checked aria-label="Select: customer id never null" />
+      <div>
+        <p class="statement">Every order names a customer.</p>
+        <div class="evidence">0 of 512,000 sampled rows have a null customer_id</div>
+      </div>
+      <span class="stamp stamp-plain">Proposed</span>
+    </div>
+    <div class="bulk-row selected">
+      <input type="checkbox" checked aria-label="Select: order date fits format" />
+      <div>
+        <p class="statement">Order dates are real calendar timestamps.</p>
+        <div class="evidence">0 of 512,000 sampled rows fail to parse as timestamps · earliest 2019-03-02</div>
+      </div>
+      <span class="stamp stamp-plain">Proposed</span>
+    </div>
+    <div class="bulk-row held">
+      <span class="mono" style="font-size:14px;color:var(--hold);padding-top:4px" aria-hidden="true">✕</span>
+      <div>
+        <p class="statement">Order status is always one of: <em>shipped, pending, cancelled, returned</em>.</p>
+        <div class="evidence">0 of 512,000 sampled rows violate this · 4 distinct values observed</div>
+        <p class="ctx" style="margin:6px 0 0">Held for the domain expert — a status can be missing from half a million
+        rows and still exist. Excluded from bulk selection.</p>
+      </div>
+      <span class="stamp stamp-hold">Needs review</span>
+    </div>
+
+    <div class="bulk-bar">
+      <span class="why">Accepting turns a proposal into an enforced clause. Each of the three evidence lines above is
+      in view right now — that is the condition for this button.</span>
+      <button class="act primary" id="bulk-btn">Accept 3 selected · cap 10</button>
+    </div>
+
+    <!-- Accepted clauses -->
+    <h2 class="bucket"><span class="roman">IV</span>Clauses in force — 5</h2>
+    <p class="bucket-note">Accepted rules are numbered clauses. There is no inline edit: <em>Amend</em> drafts a
+    revision that re-enters review; the clause below stays in force until the revision is accepted.</p>
+
+    <div class="entry">
+      <div class="eno">§ 1</div>
+      <div>
+        <p class="statement">An order's total is 0.00 or more.</p>
+        <div class="evidence">accepted 14 Aug 2026 by domain-expert view · spec v1 · last result: FAIL in R-0142</div>
+        <div class="actions">
+          <button class="act quiet">Amend — drafts revision v2 for review</button>
+          <button class="act quiet">History</button>
+        </div>
+      </div>
+    </div>
+    <div class="entry">
+      <div class="eno">§ 2</div>
+      <div>
+        <p class="statement">Order status is always one of: shipped, pending, cancelled, returned.</p>
+        <div class="evidence">accepted 14 Aug 2026 · spec v1 · last result: PASS in R-0142 (sampled)</div>
+        <div class="actions">
+          <button class="act quiet">Amend — drafts revision v2 for review</button>
+          <button class="act quiet">History</button>
+        </div>
+      </div>
+    </div>
+    <div class="entry">
+      <div class="eno">§ 3</div>
+      <div>
+        <p class="statement">Every order has a unique order ID.</p>
+        <div class="evidence">accepted 15 Aug 2026 · spec v1 · last result: PASS in R-0142 (sampled)</div>
+        <div class="actions">
+          <button class="act quiet">Amend — drafts revision v2 for review</button>
+          <button class="act quiet">History</button>
+        </div>
+      </div>
+    </div>
+    <div class="entry">
+      <div class="eno">§ 4</div>
+      <div>
+        <p class="statement">Promo codes are 4–12 characters, capitals and digits only.</p>
+        <div class="evidence">accepted 15 Aug 2026 · spec v1 · last result: ERRORED in R-0142 — column missing from live schema</div>
+        <div class="actions">
+          <button class="act quiet">Amend — drafts revision v2 for review</button>
+          <button class="act quiet">History</button>
+        </div>
+      </div>
+    </div>
+    <div class="entry">
+      <div class="eno">§ 5</div>
+      <div>
+        <p class="statement">Every order names a customer.</p>
+        <div class="evidence">accepted 15 Aug 2026 · spec v1 · last result: PASS in R-0142 (sampled)</div>
+        <div class="actions">
+          <button class="act quiet">Amend — drafts revision v2 for review</button>
+          <button class="act quiet">History</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================
+       F13 · RESULTS DASHBOARD — RUN RECORDS
+       ================================================================ -->
+  <section class="screen" id="f13">
+    <div class="folio-mark">Folio F13 · the book of record</div>
+    <h1 class="folio">Run Records</h1>
+    <p class="folio-sub">Every entry on this page renders from a persisted run record — never from the request that
+    started it. A synchronous run is simply a record that completed while you watched; “running” is just another
+    status a record can hold.</p>
+
+    <h2 class="bucket"><span class="roman">I</span>The ledger — newest first</h2>
+    <div class="scroll">
+      <table class="ledger">
+        <thead><tr><th>Record</th><th>Table</th><th>Requested</th><th>Status — one atom, sampling &amp; error inside it</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="tname">R-0143</td><td class="n">payments</td><td class="n">16 Aug 14:07:22</td>
+            <td><span class="stamp stamp-plain">Running · started 14:07:22 <span class="stamp-running-dot">·</span></span></td>
+            <td class="n" style="font-style:italic">record updates as it completes</td>
+          </tr>
+          <tr>
+            <td class="tname">R-0142</td><td class="n">orders</td><td class="n">16 Aug 14:02:10</td>
+            <td><span class="stamp stamp-fail">Failed · sampled 500K / 2.4M</span></td>
+            <td><a href="#r0142">Open below ↓</a></td>
+          </tr>
+          <tr>
+            <td class="tname">R-0141</td><td class="n">customers</td><td class="n">16 Aug 13:58:41</td>
+            <td><span class="stamp stamp-pass">Passed · all 84,210 rows</span></td>
+            <td><a href="#f13">Open →</a></td>
+          </tr>
+          <tr>
+            <td class="tname">R-0139</td><td class="n">payments</td><td class="n">15 Aug 18:22:05</td>
+            <td><span class="stamp stamp-fail">Errored · rule could not run</span></td>
+            <td><a href="#f13">Open →</a></td>
+          </tr>
+          <tr>
+            <td class="tname">R-0136</td><td class="n">orders</td><td class="n">14 Aug 09:11:47</td>
+            <td><span class="stamp stamp-pass">Passed · sampled 500K / 2.4M</span></td>
+            <td><a href="#f13">Open →</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bucket-note" style="margin-top:10px">R-0136 passed <em>on its sample</em> — 1.9M rows went unscanned,
+    so it still files under “unverifiable” in the Explorer. The stamp says so itself.</p>
+
+    <h2 class="bucket" id="r0142"><span class="roman">II</span>Record R-0142 — orders</h2>
+
+    <div class="record-head">
+      <div class="cell"><span class="label">Record</span><span class="v">R-0142</span></div>
+      <div class="cell"><span class="label">Table</span><span class="v">orders · 2,400,000 rows</span></div>
+      <div class="cell"><span class="label">Requested by</span><span class="v">engineer view · 16 Aug 14:02:10</span></div>
+      <div class="cell"><span class="label">Duration</span><span class="v">41.8 s · row cap engaged at 500,000</span></div>
+      <div class="cell"><span class="label">Status</span><span class="stamp stamp-fail bigstamp">Failed · sampled 500K / 2.4M</span></div>
+    </div>
+
+    <p class="bucket-note" style="margin-top:14px">Five clauses ran. One failed, one errored, three passed —
+    all on the same 500,000-row sample, and each result says so.</p>
+
+    <div class="clause-result">
+      <div class="eno">§ 1</div>
+      <div>
+        <p class="statement">An order's total is 0.00 or more.</p>
+        <div class="meta-row" style="margin:2px 0 0"><span class="stamp stamp-fail">Fail · 23 of 500,000 sampled rows · 0.0046%</span></div>
+        <div class="offenders">
+          #88231 <b>−450.00</b> · #90112 <b>−12.99</b> · #91877 <b>−3.50</b> · #93405 <b>−87.20</b> · #94018 <b>−219.00</b> · <a href="#f13">+18 more</a>
+        </div>
+      </div>
+    </div>
+    <div class="clause-result">
+      <div class="eno">§ 2</div>
+      <div>
+        <p class="statement">Order status is always one of: shipped, pending, cancelled, returned.</p>
+        <div class="meta-row" style="margin:2px 0 0"><span class="stamp stamp-pass">Pass · sampled 500K / 2.4M</span></div>
+      </div>
+    </div>
+    <div class="clause-result">
+      <div class="eno">§ 3</div>
+      <div>
+        <p class="statement">Every order has a unique order ID.</p>
+        <div class="meta-row" style="margin:2px 0 0"><span class="stamp stamp-pass">Pass · sampled 500K / 2.4M</span></div>
+      </div>
+    </div>
+    <div class="clause-result">
+      <div class="eno">§ 4</div>
+      <div>
+        <p class="statement">Promo codes are 4–12 characters, capitals and digits only.</p>
+        <div class="meta-row" style="margin:2px 0 0"><span class="stamp stamp-fail">Errored · rule could not run</span></div>
+        <div class="offenders">column <b>promo_code</b> not found in live schema — dropped after this clause was accepted. Amend § 4 or retire it.</div>
+      </div>
+    </div>
+    <div class="clause-result">
+      <div class="eno">§ 5</div>
+      <div>
+        <p class="statement">Every order names a customer.</p>
+        <div class="meta-row" style="margin:2px 0 0"><span class="stamp stamp-pass">Pass · sampled 500K / 2.4M</span></div>
+      </div>
+    </div>
+
+    <details class="paperclip">
+      <summary>Raw Great Expectations output — retained verbatim on the record</summary>
+<pre>{
+  "success": false,
+  "statistics": { "evaluated_expectations": 5, "successful_expectations": 3 },
+  "results": [
+    { "expectation_config": { "type": "expect_column_values_to_be_between",
+        "kwargs": { "column": "order_total", "min_value": 0 } },
+      "success": false,
+      "result": { "element_count": 500000, "unexpected_count": 23,
+        "partial_unexpected_list": [-450.00, -12.99, -3.50, -87.20, -219.00] } },
+    …
+  ]
+}</pre>
+    </details>
+
+    <p class="immutability">Run records are immutable. There is nothing on this page that edits one. Re-running
+    appends R-0144 to the ledger; this entry stays exactly as it was written.</p>
+    <div class="actions">
+      <button class="act primary">Re-run orders — appends a new record</button>
+    </div>
+  </section>
+
+  <p class="footnote">Run Ledger · demo book · acme-commerce on Supabase PostgreSQL · all results shown are drawn
+  from persisted run records R-0136–R-0143.</p>
+</div>
+
+<script>
+  // Tabs
+  var tabs = document.querySelectorAll('nav.tabs button');
+  var screens = document.querySelectorAll('section.screen');
+  function show(id) {
+    tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.screen === id)); });
+    screens.forEach(function (s) { s.classList.toggle('open', s.id === id); });
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.screen); }); });
+  // In-page links between screens (#f12, #f13, #r0142)
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var target = id.indexOf('f1') === 0 ? id : 'f13';
+      show(target); if (id === 'r0142') { e.preventDefault(); show('f13');
+        document.getElementById('r0142').scrollIntoView(); } else { e.preventDefault(); window.scrollTo(0, 0); }
+    });
+  });
+  // Role doors: role is a view — it changes where you enter, not what exists
+  var eng = document.getElementById('door-eng'), dx = document.getElementById('door-dx'),
+      note = document.getElementById('door-note');
+  eng.addEventListener('click', function () {
+    eng.setAttribute('aria-pressed', 'true'); dx.setAttribute('aria-pressed', 'false');
+    note.textContent = 'Viewing as engineer — full ledger, table-first.'; show('f10');
+  });
+  dx.addEventListener('click', function () {
+    dx.setAttribute('aria-pressed', 'true'); eng.setAttribute('aria-pressed', 'false');
+    note.textContent = 'Viewing as domain expert — you enter at the Review Queue; table names are context, never doors.';
+    show('f11');
+  });
+  // Bulk-accept count follows the checkboxes; needs_review has no checkbox at all
+  var boxes = document.querySelectorAll('.bulk-row input[type=checkbox]');
+  var bulkBtn = document.getElementById('bulk-btn');
+  boxes.forEach(function (b) {
+    b.addEventListener('change', function () {
+      b.closest('.bulk-row').classList.toggle('selected', b.checked);
+      var n = Array.prototype.filter.call(boxes, function (x) { return x.checked; }).length;
+      bulkBtn.textContent = 'Accept ' + n + ' selected · cap 10';
+      bulkBtn.disabled = n === 0;
+    });
+  });
+</script>
