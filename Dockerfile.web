@@ -1,0 +1,38 @@
+# The Next application. It renders every screen server-side and is the only thing
+# a reviewer's browser talks to; `web/app/api.ts` reaches the Python service from
+# Server Components, so there is no second origin, no CORS and no API URL in the
+# bundle (see that file's header).
+#
+# The build context is the REPO ROOT rather than `web/`, so that this file and
+# Dockerfile.api sit together and share one .dockerignore — which is where the
+# rule that keeps `.env` out of every layer is written once instead of twice.
+
+FROM node:22-bookworm-slim
+
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /srv/web
+
+# The lockfile first, so a change to a component does not re-resolve 346 packages.
+# `npm ci` and not `npm install`: ci installs exactly what web/package-lock.json
+# says and fails if the manifest and the lockfile disagree, which is the whole
+# difference between "the reviewer gets what we tested" and "the reviewer gets
+# whatever the registry served this morning".
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# NODE_ENV is deliberately NOT set to production before this. `npm ci` under
+# production skips devDependencies, and typescript, @types/* and eslint-config-next
+# are all in that half — `next build` then fails on a missing compiler.
+COPY web ./
+RUN npm run build
+
+# DQ_API_URL is deliberately NOT set here. docker-compose.yml points it at the api
+# service on every sanctioned run, and a container run on its own would get exactly the
+# value this line used to state — web/app/api.ts already defaults to it. One default,
+# one place.
+EXPOSE 3000
+
+# `next start` — the production server, the same artefact the browser layer
+# screenshots. It binds 0.0.0.0 by default, which is what makes the published
+# port reachable from the host.
+CMD ["npm", "run", "start"]

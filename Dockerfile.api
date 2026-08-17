@@ -1,0 +1,74 @@
+# The Python service: the ONE process that holds the single Great Expectations
+# context (INV-3) and streams a run's verdicts as they land (F8, SPEC O-4).
+#
+# THE DEPENDENCY LIST LIVES HERE AND NOWHERE ELSE, on purpose. `pyproject.toml`
+# declares none by design — it configures the gate and nothing more — and the
+# development path resolves them per-command with `uv run --with ...`
+# (VERIFICATION.md §1). Adding a requirements.txt would make a third place for
+# the same five names to disagree. If you change the line below, change the
+# `uv run` line in the Makefile's `check-ge` target too; they are the same set.
+#
+# ponytail: one stage, no wheel cache mount, no image-size budget. The bead
+# (dq-cyi.1) puts multi-stage optimisation out of scope, and the honest ceiling
+# is that this image is ~1.4 GB because Great Expectations brings pandas and the
+# Claude Code CLI brings a Node runtime. Nobody is pulling it over a phone.
+
+FROM python:3.12-slim-bookworm
+
+# Node, purely because `app/model.py` needs it. claude-agent-sdk does not speak
+# to the Anthropic API itself — it SPAWNS the `claude` binary and talks to it over
+# a pipe — so a Python-only image starts fine and then refuses every rule proposal
+# (F3) and every authored rule (F4) with a "command not found" from inside the SDK.
+# Copied from the official Node image rather than installed from apt or NodeSource:
+# it is two lines, it pins the runtime exactly, and it adds no apt source to trust.
+# python:3.12-slim owns /usr/local but has no /usr/local/lib/node_modules, so there
+# is nothing here to clobber.
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
+
+# Pinned to the CLI version app/model.py names in BUILTIN_TOOLS. That constant is
+# a hand-maintained roster of one release's built-in tools (the SDK exports no
+# enumeration), so the version it was written against is part of the sandbox and
+# belongs pinned beside it rather than floating on `latest`.
+RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.233
+
+# great-expectations is pinned because SPEC §3 pins it and LT-1a/LT-1b measured
+# against it. claude-agent-sdk is pinned because LT-2b proved the four sandbox
+# settings against that exact release. The three database drivers are not pinned
+# because nothing here has ever depended on a version of them:
+#   psycopg2-binary   what app/ imports, everywhere
+#   psycopg[binary]   psycopg 3 — NOT a duplicate: seed/seed_demo_data.py and the
+#                     role-minting recipe in app/db/roles.sql use it, and a
+#                     reviewer with no local Python runs both inside this image
+#   sqlalchemy        how Great Expectations reaches PostgreSQL
+RUN pip install --no-cache-dir \
+      great-expectations==1.20.0 \
+      claude-agent-sdk==0.1.23 \
+      'sqlalchemy>=2' \
+      psycopg2-binary \
+      'psycopg[binary]'
+
+# Not root. The Claude Code CLI writes state under $HOME and behaves differently
+# when it is uid 0, and a demo server has no reason to hold the root of anything.
+RUN useradd --create-home --uid 10001 dq
+USER dq
+WORKDIR /srv
+
+# Only what the process runs. `seed/` rides along so a reviewer whose database is
+# empty can seed it with the image they already built, instead of installing
+# Python 3.12 and psycopg to run one script (see README, "If the tables or the
+# roles are missing").
+COPY --chown=dq:dq app ./app
+COPY --chown=dq:dq seed ./seed
+
+# DQ_API_PORT is not here: app/api/server.py's DEFAULT_PORT is 8000 and compose sets
+# the variable explicitly anyway. Restating it would be a third copy of one number.
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+EXPOSE 8000
+
+# `serve()` connects the datasource BEFORE it binds the socket, so a listening
+# port on this container means the framework is warm and the database answered —
+# which is what makes the compose healthcheck a real readiness signal and not a
+# liveness one.
+CMD ["python3", "-m", "app.api.server"]

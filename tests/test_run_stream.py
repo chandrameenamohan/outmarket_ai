@@ -149,7 +149,7 @@ def test_the_first_event_lists_every_rule_before_any_of_them_runs() -> None:
     assert [r["statement"] for r in first["rules"]] == [
         "Every order_total is at least 0",
         "Every status is one of pending, paid, shipped, delivered, cancelled, returned",
-        "No two rows share a order_reference",
+        "No two rows share the same order_reference",
     ], f"the list reads {[r['statement'] for r in first['rules']]}"
     assert {r["status"] for r in first["rules"]} == {status.UNSETTLED_ATOM}, (
         "a not-yet-reported rule must carry the single writer's pending text; anything else "

@@ -24,7 +24,10 @@ against the schema it will run against. `set_status()` writes no spec at all: it
 carries the prior revision's forward untouched, which is why judging a rule cannot
 be a back door into changing what it checks. The three writers are a closed set
 and the gate asserts it, so a fourth one is a decision someone has to make in
-front of a failing test.
+front of a failing test. `judge_batch()` is not one: it appends nothing itself
+and reaches the table only through `propose()` and `set_status()`, which is what
+makes F12's bulk accept incapable of skipping the validator however many rules a
+person selected.
 
 WHAT IS NEVER STORED: the Great Expectations configuration. The stored spec is
 `{"type": ..., "kwargs": {...}}` — ours, and the same shape `compile_suite()`
@@ -53,7 +56,7 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -88,8 +91,46 @@ _WRITE = """
 """
 
 
+# F12 · how many rules one bulk accept may carry. It is a REVIEW limit rather than a
+# transaction limit, and the sentence that explains it is
+# `app/dq/status.py::bulk_note()` — the number lives here because this is the module
+# that refuses one past it, and a cap a client applies is a cap anybody can post past.
+#
+# Eight is what fits on a screen alongside its evidence lines, which is the whole
+# requirement (UX_HARNESS_FINDINGS §4): a bulk accept that hides what it is accepting
+# is how forty business-naive rules (LT-2b) enter at once.
+BULK_CAP = 8
+
+
 class UnknownRule(LookupError):
     """No rule with that id has ever been written here."""
+
+
+def judgeable(status: str, reason: str | None) -> None:
+    """Is this a judgment the store will accept? Raises `ValueError` naming what is wrong.
+
+    Split out of `Revision.__post_init__` — which is still its only unconditional
+    caller, so nothing can be stored without passing it — because `judge_batch()`
+    below has to ask the question BEFORE it writes anything. That is a sequencing
+    problem and not a duplication one: an unsaved proposal is persisted by `propose()`
+    and judged by `set_status()`, so a reasonless rejection discovered at the second
+    step would leave revision 1 sitting in an append-only table, proposed by a machine
+    and judged by nobody, with no way to take it back out.
+
+    One function, two callers, one copy of the rule.
+    """
+    if status not in STATES:
+        raise ValueError(
+            f"{status!r} is not a rule state; the four are {STATES}. A fifth state "
+            "would have to mean something to both users, and the two questions this "
+            "product asks — is it worth reviewing, is it worth running — have four answers."
+        )
+    if status == REJECTED and not (reason or "").strip():
+        raise ValueError(
+            "a rejected rule must carry the reason it was rejected. A rule that vanishes "
+            "with no reason gets proposed again next week, and the person who rejected it "
+            "is the only one who knows why it should not be."
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,18 +161,7 @@ class Revision:
     written_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if self.status not in STATES:
-            raise ValueError(
-                f"{self.status!r} is not a rule state; the four are {STATES}. A fifth state "
-                "would have to mean something to both users, and the two questions this "
-                "product asks — is it worth reviewing, is it worth running — have four answers."
-            )
-        if self.status == REJECTED and not (self.reason or "").strip():
-            raise ValueError(
-                "a rejected rule must carry the reason it was rejected. A rule that vanishes "
-                "with no reason gets proposed again next week, and the person who rejected it "
-                "is the only one who knows why it should not be."
-            )
+        judgeable(self.status, self.reason)
         if set(self.spec) != {"type", "kwargs"}:
             raise ValueError(
                 f"a stored spec is {{'type', 'kwargs'}}, ours, as validate() returned it; got "
@@ -191,6 +221,62 @@ def amend(rule_id: str, etype: str, kwargs: Mapping[str, Any]) -> Revision:
 def set_status(rule_id: str, status: str, reason: str | None = None) -> Revision:
     """Move a rule through the workflow. Carries the spec forward; cannot change it."""
     return _append(latest(rule_id).judged(status, reason))
+
+
+# --- F12's one act of judgment, over a selection that may be either kind ------
+
+
+def judge_batch(
+    table: str,
+    specs: Sequence[Mapping[str, Any]],
+    rule_ids: Sequence[str],
+    status: str,
+    reason: str | None = None,
+) -> tuple[Revision, ...]:
+    """Judge a selection in one act — unsaved proposals, stored rules, or both.
+
+    NOT A FOURTH WRITER, and the check in `tests/test_rule_store.py` is what says so:
+    nothing here appends. Each unsaved spec walks `propose()`, which hands it to
+    `validate()` exactly as though a person had typed it — so a proposal that reached
+    the browser as JSON and came back edited is still refused by INV-2's own door — and
+    every rule, fresh or stored, is then moved by `set_status()`. The history records
+    both steps, which is the honest account: the rule was proposed, and then somebody
+    judged it.
+
+    **ACCEPTING IS THE FIRST MOMENT ANYTHING IS PERSISTED** (SPEC F12). A `Proposal` has
+    no id and no row; it is a line on a screen with a button under it, and this is the
+    function that button reaches. Nothing upstream of here can write.
+
+    THE TWO REFUSALS, BOTH BEFORE THE FIRST WRITE:
+
+      the empty selection   the screen disables the control at zero, so an empty batch
+                            arriving here means something got past it. Answering "fine,
+                            nothing happened" would make that invisible.
+      past the cap          `BULK_CAP` exists so every selected evidence line is on
+                            screen at the moment of the click. Enforced here rather
+                            than in the component, because a limit a client applies is
+                            a limit anybody can post past.
+
+    `judgeable()` runs before either write for the reason its own docstring gives: a
+    rejection with no reason must not persist revision 1 of anything on its way to
+    being refused.
+    """
+    selected = len(specs) + len(rule_ids)
+    if not selected:
+        raise ValueError(
+            "a judgment with nothing selected. The control is disabled at zero on the "
+            "screen, so an empty selection here is something that got past it — and "
+            "answering as though it had succeeded is how that stays invisible."
+        )
+    if selected > BULK_CAP:
+        raise ValueError(
+            f"{selected} rules in one act, and the cap is {BULK_CAP}. The cap is what keeps "
+            "every evidence line on screen at the moment of the click; accepting more than "
+            "can be read is the one-shotting a bulk control exists to be prevented from."
+        )
+    judgeable(status, reason)
+    fresh = [propose(table, str(spec["type"]), spec.get("kwargs") or {}).rule_id for spec in specs]
+    return tuple(set_status(rule_id, status, reason) for rule_id in [*fresh, *rule_ids])
 
 
 # --- Reading, and the two folds that decide what a state MEANS -----------------

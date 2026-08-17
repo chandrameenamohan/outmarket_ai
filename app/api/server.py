@@ -38,32 +38,102 @@ would be wrong the moment anything else is deployed. Ceiling: single process, no
 no request limits. It is the demo's server, and B22 is what puts it behind compose.
 
 WHAT THIS FILE IS NOT ALLOWED TO BECOME: a second place where rules are chosen, results
-are read or verdicts are worded. Everything below the socket is `app/dq/run.py`.
+are read or verdicts are worded. Everything below the socket is `app/dq/run.py` for the
+run and `app/rules/view.py` for everything a screen reads.
+
+THE READ SURFACE ARRIVED WITH F14 (bead dq-rbf.1) AND IS NOT THE POLLING ENDPOINT O-3
+REJECTED. The distinction is worth stating because this file used to have no `do_GET` at
+all and said so on purpose: what O-3 refused was a client asking "is the run finished
+yet?", which is a second source of truth about a run that is already streaming down an
+open socket. `GET /rules/<id>` answers a different question — what IS this rule — for a
+reader who arrived from a pasted link with no run in flight, which is F14's whole
+scenario. Nothing here polls anything, and there is still no way to ask about a run.
+
+F13 (bead `dq-klv.4`) added the second read that could be mistaken for the same thing,
+and it is not: `GET /records/<recordId>` answers with a run that is OVER. A record only
+exists because a run finished and was written down, so there is no state it can report
+that a client could wait on — which is the difference between reading a fact and polling
+a job. The run route still answers no GET at all, on the socket and in the source
+(`tests/test_run_endpoint.py`), and a run in flight remains addressable only by the
+caller streaming it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import unquote, urlparse
 
-from app.dq import normalise, profile, run
+from app.api import request
+from app.dq import coverage, normalise, profile, run, runs
+from app.rules import desk, store, view
 from app.rules import schema as live
-from app.rules import store
 
-# The one route. A run is an action on a table, so the table is in the path and there
-# is no body to parse; `POST` because running one is not a safe, repeatable read.
+# A run is an action on a table, so the table is in the path and there is no body to
+# parse; `POST` because running one is not a safe, repeatable read. A rule is a thing,
+# so it is a noun with an id — and that id is what F14's permalink is made of.
 RUN_ROUTE = "/runs"
+RULE_ROUTE = "/rules"
+
+# F13 · a written RECORD is a different noun from a run, and the difference is exactly
+# the one O-3 settled. A run is an action that streams down the socket it was triggered
+# on; there is no way to ask this server how one is getting on, and there never will be.
+# A record is a fact that a completed run left behind — the thing F9's cache clause is
+# about, the thing `/runs/[recordId]` addresses in the browser, and the only half of the
+# pair a reload can render. So it answers GET, and the run does not: `GET /runs/orders`
+# is still a 404, which is what `tests/test_run_endpoint.py` asserts on both the socket
+# and the source. The browser route keeps the word "runs" because that is the word a
+# person uses for what they are looking at; the API says which of the two nouns it means.
+RECORD_ROUTE = "/records"
+
+# F10's coverage dashboard takes no parameters at all: it is every table in the connected
+# schema, ranked, and a `?bucket=` or `?sort=` would be the browsing controls SPEC F10
+# lists as out of scope. The whole payload is one document because the ORDER is the
+# product here — three buckets a client could fetch separately are three buckets a client
+# could render in its own order, which is the one thing this screen may not allow.
+TABLE_ROUTE = "/tables"
+
+# F11's queue is its own noun and not a filter on `/rules`, because it is not one: it
+# spans every table at once, it joins the rule store against the last COMPLETED run
+# record, and it drops rules that are perfectly fine. `?table=` narrows it and is
+# optional — the unscoped queue is the domain expert's front door, and an endpoint that
+# demanded a table name would be the table list F11 forbids, wearing a query string.
+REVIEW_ROUTE = "/review"
+
+# F12's two BILLED doors, and they are POSTs for a reason that is not verb pedantry: each
+# one costs a real model call (~$0.04, ~6.6 s — LT-2b), so neither may be reachable by a
+# prefetch, a crawler or a back button, which is exactly what a GET invites. They are also
+# two nouns rather than one endpoint with a mode, because they ask the model different
+# questions from different inputs: a PROPOSAL is inferred from a table's statistics and
+# arrives in a batch, a DRAFT is translated from one person's sentence and arrives alone
+# or as a refusal. Neither of them writes anything — accepting is what writes (SPEC F12).
+PROPOSAL_ROUTE = "/proposals"
+DRAFT_ROUTE = "/drafts"
+
+# The one query parameter that changes what a payload CONTAINS rather than which rows it
+# selects: `?configuration=1` is SPEC F12's Rev 0.4 amendment on the wire. The engineer's
+# screen asks for it and gets facing pages; the domain expert's screen does not, and the
+# framework is then absent from the answer rather than hidden in it. See app/rules/view.py.
+CONFIGURATION = "configuration"
 
 # Not `application/json`: the body is a SEQUENCE of JSON documents, and a client that
 # waited to parse it as one object would wait for the whole run — which is the exact
-# behaviour this endpoint exists to avoid.
+# behaviour this endpoint exists to avoid. It is the RUN's content type only; the read
+# surface below answers with one document and says so.
 NDJSON = "application/x-ndjson"
+JSON = "application/json"
 
 PORT_VAR = "DQ_API_PORT"
 DEFAULT_PORT = 8000
+
+# What the store, the profiler and the schema reader raise when the thing asked for is
+# not there or the database is not answering — `Unavailable` on both sides is a
+# RuntimeError, so this set covers it without naming two modules' exception classes.
+# Caught as one set because the honest response to all of them is the same: a status
+# code carrying the sentence they wrote, never a 200 with an empty screen behind it.
+REFUSALS = (LookupError, RuntimeError, ValueError)
 
 
 def plan(table: str) -> tuple[normalise.Scan, tuple[dict[str, Any], ...], tuple[str, ...]]:
@@ -107,23 +177,82 @@ def plan(table: str) -> tuple[normalise.Scan, tuple[dict[str, Any], ...], tuple[
 
 
 class Handler(BaseHTTPRequestHandler):
-    """One verb, one route. Everything else answers 404 or 501 without being written.
+    """Every route the product has. Each verb dispatches in one short function and does
+    no work itself.
 
-    There is deliberately no `do_GET`: a polling endpoint is the thing O-3 rejected, so
-    the absence is the design and `BaseHTTPRequestHandler`'s own 501 is a better refusal
-    than one written here.
+    `_ROUTES` is the whole route table as a sentence, and it is what a 404 says back —
+    so a client that guesses wrong is told what this server actually has, which is the
+    thing a hand-rolled HTTP handler loses first.
+
+    ponytail: still an `if` chain. This file's earlier note put the ceiling at the fifth
+    route and named the replacement — a dict keyed by `(verb, segment count)` — and the
+    screens of E5 took it past that. The chain stays, because the replacement was
+    written out against this and is not smaller: a dict entry plus a lookup plus a
+    fallback is more code than an `elif` line that already reads as the route list.
+    Ceiling restated where it belongs, on the reader rather than on a count: the chain
+    goes the day `_ROUTES` stops being a sentence somebody can hold in their head.
     """
 
     protocol_version = "HTTP/1.0"
 
-    def do_POST(self) -> None:  # the base class names the verb; the case is not ours
-        table = _table(self.path)
-        if table is None:
-            self._refuse(404, f"POST {RUN_ROUTE}/<table> is the only route this server has.")
-            return
+    def do_GET(self) -> None:  # the base class names the verb; the case is not ours
+        segments, query = request.parse(self.path)
+        if request.route(segments) == RULE_ROUTE and len(segments) == 1:
+            self._read(
+                lambda: desk.workbench(
+                    request.one(query, "table"), request.flag(query, CONFIGURATION)
+                )
+            )
+        elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
+            self._read(lambda: view.of(segments[1], request.flag(query, CONFIGURATION)))
+        elif request.route(segments) == TABLE_ROUTE and len(segments) == 1:
+            self._read(coverage.listing)
+        elif request.route(segments) == REVIEW_ROUTE and len(segments) == 1:
+            self._read(lambda: view.queue(request.optional(query, "table")))
+        elif request.route(segments) == RECORD_ROUTE and len(segments) == 1:
+            self._read(lambda: view.last_run(request.one(query, "table")))
+        elif request.route(segments) == RECORD_ROUTE and len(segments) == 2:
+            self._read(lambda: view.run_record(segments[1]))
+        else:
+            self._refuse(404, _ROUTES)
+
+    def do_POST(self) -> None:
+        segments, query = request.parse(self.path)
+        configured = request.flag(query, CONFIGURATION)
+        if request.route(segments) == RUN_ROUTE and len(segments) == 2:
+            self._run(segments[1])
+        elif request.route(segments) == RULE_ROUTE and len(segments) == 1:
+            self._batch()
+        elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
+            self._judge(segments[1])
+        elif (
+            request.route(segments) == RULE_ROUTE
+            and len(segments) == 3
+            and segments[2] == "revision"
+        ):
+            body = self._body()
+            # `asyncio.run` on this request's own thread, here and on the two billed
+            # routes below. F12's authoring path is `async` because the Agent SDK is,
+            # and this server is threads rather than an event loop (ThreadingHTTPServer;
+            # see the module docstring) — so each request makes a loop, runs the one call
+            # and closes it. There is no loop to conflict with and nothing shared between
+            # them, and the setup is microseconds beside a call that spends 6.6 s on the
+            # network (LT-2b).
+            self._read(lambda: asyncio.run(desk.revise(segments[1], *request.revision(body))))
+        elif request.route(segments) == PROPOSAL_ROUTE and len(segments) == 2:
+            self._read(lambda: asyncio.run(desk.proposals(segments[1], configured)))
+        elif request.route(segments) == DRAFT_ROUTE and len(segments) == 2:
+            asked = request.required(self._body(), "request")
+            self._read(lambda: asyncio.run(desk.draft(asked, segments[1], configured)))
+        else:
+            self._refuse(404, _ROUTES)
+
+    # --- the run: one action, one response, one line of JSON per verdict ----------
+
+    def _run(self, table: str) -> None:
         try:
             scan, specs, identifiers = plan(table)
-        except (LookupError, RuntimeError, ValueError) as exc:
+        except REFUSALS as exc:
             self._refuse(422, str(exc))
             return
 
@@ -143,11 +272,96 @@ class Handler(BaseHTTPRequestHandler):
             # previous record as the most recent one (SPEC F9).
             return
 
+    # --- the read surface, and the one judgment that writes ----------------------
+
+    def _read(self, produce: Any) -> None:
+        """Run a reader and answer with what it returned, or with why it could not.
+
+        A thing that is not there is a 404 and everything else a 422, which is the
+        distinction a permalink actually needs: a pasted link to a rule, a run record or
+        a table that does not exist is a different problem from a database that is not
+        answering, and the screen renders them differently. All three misses are the same
+        answer, so they are caught as one tuple rather than as three clauses that could
+        drift — `UnknownTable` joined with F12's desk (dq-rbf.4), which reads the live
+        schema before it composes anything from a name that arrived in a URL (SPEC §3.1).
+        A typo in an address is not an empty table, and the two must not look alike.
+        `Cache-Control: no-store` because a rule's state changes the moment somebody
+        presses one of the buttons on the page reading it.
+        """
+        try:
+            payload = produce()
+        except (store.UnknownRule, runs.UnknownRun, live.UnknownTable) as exc:
+            self._refuse(404, str(exc))
+        except REFUSALS as exc:
+            self._refuse(422, str(exc))
+        else:
+            self._send(200, json.dumps(payload).encode(), JSON)
+
+    def _batch(self) -> None:
+        """F12 · one act of judgment over a selection (SPEC F12, bead dq-rbf.4).
+
+        The body carries unsaved proposals (`specs`), stored rules (`rule_ids`), or both,
+        and `store.judge_batch()` does everything: the cap, the empty selection, the
+        reason requirement, the validator on every spec, and the two revisions each fresh
+        rule gets. Nothing is decided here — a cap re-checked in this handler would be a
+        second opinion, and the one that matters is the one nearest the table.
+        """
+        self._read(
+            lambda: {
+                "rules": [
+                    {"rule_id": rev.rule_id, "revision": rev.revision, "status": rev.status}
+                    for rev in request.batched(self._body())
+                ]
+            }
+        )
+
+    def _judge(self, rule_id: str) -> None:
+        """Accept / reject / ask business, as one appended revision (F6, F12).
+
+        The status and the reason are handed straight to `store.set_status()`, which
+        validates both: an unknown state and a rejection with no reason are refused by
+        the store's own `Revision`, so there is nothing to check here that would not be
+        a second, weaker copy of that check.
+        """
+        try:
+            body = self._body()
+            reason = (body.get("reason") or "").strip() or None
+            store.set_status(rule_id, str(body.get("status")), reason)
+        except store.UnknownRule as exc:
+            self._refuse(404, str(exc))
+            return
+        except REFUSALS as exc:
+            self._refuse(422, str(exc))
+            return
+        self._read(lambda: view.of(rule_id))
+
+    def _body(self) -> dict[str, Any]:
+        """The bytes off the socket, parsed. The only part of a body this class touches.
+
+        Reading is HTTP and belongs here; deciding what the object means is
+        `app/api/request.py`, which every POST route below asks. Content-Length is the
+        frame — `protocol_version` is HTTP/1.0, so there is no chunked request body to
+        reassemble.
+        """
+        return request.body(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+
+    # --- writing bytes -----------------------------------------------------------
+
     def _refuse(self, code: int, message: str) -> None:
+        """One refusal shape for both surfaces.
+
+        It stays NDJSON-framed — one object, then a newline — because the run's client
+        reads this response with the same line reader it reads verdicts with, and the
+        read surface's client parses one document either way.
+        """
         body = json.dumps({"event": "refused", "message": message}).encode() + b"\n"
+        self._send(code, body, NDJSON)
+
+    def _send(self, code: int, body: bytes, content_type: str) -> None:
         self.send_response(code)
-        self.send_header("Content-Type", NDJSON)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -167,12 +381,18 @@ def serve(port: int | None = None) -> None:
         httpd.serve_forever()
 
 
-def _table(path: str) -> str | None:
-    """`/runs/orders` -> `orders`. Anything else is not this route."""
-    parts = urlparse(path).path.strip("/").split("/")
-    if len(parts) == 2 and f"/{parts[0]}" == RUN_ROUTE and parts[1]:
-        return unquote(parts[1])
-    return None
+# The route table, as the sentence a 404 answers with. Written once, next to the four
+# handlers above, because a server whose refusal does not say what it serves makes the
+# caller read this file to find out.
+_ROUTES = (
+    f"this server has GET {RULE_ROUTE}?table=<table>[&{CONFIGURATION}=1], "
+    f"GET {RULE_ROUTE}/<ruleId>[?{CONFIGURATION}=1], "
+    f"GET {REVIEW_ROUTE}[?table=<table>], GET {TABLE_ROUTE}, "
+    f"GET {RECORD_ROUTE}?table=<table>, GET {RECORD_ROUTE}/<recordId>, "
+    f"POST {RULE_ROUTE}, POST {RULE_ROUTE}/<ruleId>, POST {RULE_ROUTE}/<ruleId>/revision, "
+    f"POST {PROPOSAL_ROUTE}/<table>, POST {DRAFT_ROUTE}/<table> "
+    f"and POST {RUN_ROUTE}/<table>."
+)
 
 
 if __name__ == "__main__":
