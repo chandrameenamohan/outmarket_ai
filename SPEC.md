@@ -1,6 +1,7 @@
 # SPEC — AI-Powered Data Quality Assistant
 
-**Status:** Rev 0.3 · **FROZEN** 2026-08-16 · pre-implementation
+**Status:** Rev 0.4 · **FROZEN** 2026-08-17 · in implementation
+**Changed in 0.4 (2026-08-17, author's decision):** one acceptance clause, F12's. The author selected `design/ux-variant-workbench.html` (Diglot Workbench) as the base UI direction, overriding the judge panel's preference for Run Ledger (23.0 against 25.4). Workbench's core idea is a bilingual split — plain English and the GE configuration as **facing pages** — which is incompatible with F12's original "collapsed by default". The underlying intent of that clause was that the domain expert should not be confronted with the framework, and Workbench honours it by a stronger mechanism than collapsing: the GE pane is not rendered at all for the domain expert (`body.expert .ge-pane { display: none }`), while the engineer sees both side by side. So the clause changed and the intent did not. Recorded rather than absorbed silently, because F12 was frozen. No other feature, invariant or non-goal changed. Known risk, from the judges: Workbench scored lowest but one on expert usability (6.5 of 10) — the mitigation is the graft the judges themselves proposed, taking the Reviewer variant's queue time-budget indicator and its "Accept — I vouch for this" copy. See `design/README.md`.
 **Changed in 0.3 (2026-08-16, still pre-implementation):** two acceptance passages only, both saying out loud what O-2 had already settled — F8's *sampling disclosure* clause (the cap ships **off**; the marker still ships, and every result declares which of the two it is) and §7 scenario step 7 (the status token carries no sampling clause because no cap engaged). §8's contingency paragraph records that LT-1b triggered it only halfway. No feature, invariant or non-goal changed. A freeze that quietly absorbs acceptance edits is worth less than no freeze, so the edits took a rev instead of hiding under 0.2.
 **Companion:** [Architecture design document](https://claude.ai/code/artifact/97a3df0c-7ae3-4e8a-94fe-6e23e8b6f0f9) — problem framing, designs not chosen, risk register
 **Frozen on:** All four learning tests (LT-1a, LT-1b, LT-2a, LT-2b) have been executed against real dependencies and recorded in `learning-tests/FINDINGS.md` — see §8. Nothing in this spec is waiting on a measurement. One implementation choice remains open — **O-4**, the transport for progressive results — which changes no acceptance text and is decided when F8 and F13 are built.
@@ -176,7 +177,7 @@ Where rules are reviewed, authored, inspected, and edited — used by both users
 *Acceptance:*
 - Proposals render with their English statement, evidence line, and Accept / Reject / Ask business actions. Unambiguous proposals can be accepted in bulk.
 - A single text field accepts a natural-language rule (F4).
-- The generated Great Expectations configuration is present and editable, **collapsed by default**.
+- The generated Great Expectations configuration is **hidden entirely from the domain expert, and a facing pane for the engineer** — present and editable, side by side with the English statement rather than folded behind a disclosure control. *(Amended in 0.4; see below.)*
 - The engineer edits the configuration; the domain expert edits the English statement and the system recompiles.
 - Rejecting captures a reason.
 
@@ -300,7 +301,7 @@ Five smaller items in the same category:
 >
 > **4 — The second user acts independently.** The domain expert opens the product, selects their role, and finds the flagged rule waiting in their queue — without seeing a table list. They also open the copied URL directly and land on the same rule. They reject it with the reason *"cancelled orders use a fourth status not in this sample"*. The reason is stored.
 >
-> **5 — English becomes an executable rule.** The domain expert types *"order total can never be negative"* into the rule field. The system returns a validated rule, shows the Great Expectations configuration it compiles to (collapsed), and saves it on confirmation.
+> **5 — English becomes an executable rule.** The domain expert types *"order total can never be negative"* into the rule field. The system returns a validated rule and saves it on confirmation. The Great Expectations configuration it compiles to is not shown to them at all — they are in the domain-expert view, where the framework pane does not render (F12, amended in 0.4).
 >
 > **6 — An impossible rule fails honestly.** They then type *"shipped date must be after order date"*. The system rejects it with an explanation naming the limitation. Nothing is stored, and coverage does not change.
 >

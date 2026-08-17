@@ -18,6 +18,12 @@ Mechanism, in two halves so the check is never vacuous:
                               half also pins the module's location.
   half C (runs today, real)   nobody outside GE_RUNTIME calls get_context(), and
                               GE_RUNTIME calls it exactly once, at module level.
+  half D (runs today, real)   the module a page load reads its cached run through
+                              (`app/dq/runs.py`) has no path to GE_RUNTIME at all,
+                              transitively. That is SPEC F9's "renders without
+                              re-executing" as an import-boundary fact, which is
+                              why it lives with the rest of the boundary rather
+                              than beside the record's shape.
 
 Half A is the one that matters — it fails the instant a second module reaches
 for GE, which is exactly when the invariant would otherwise erode silently.
@@ -41,6 +47,10 @@ from conftest import REPO, pending, source_files
 
 # Provisional path — one constant, change it here and the gate follows.
 GE_RUNTIME = pathlib.Path("app/dq/ge_runtime.py")
+
+# The module a page load reads a completed run through (half D). It is the ROOT of
+# the walk, not a member of a list: the claim is about everything reachable from it.
+RUN_CACHE = pathlib.Path("app/dq/runs.py")
 
 # Directories the gate governs. learning-tests/ and seed/ are pre-gate scripts
 # and are exempt on purpose (they import GE freely; that is their whole job).
@@ -175,3 +185,87 @@ def test_the_ge_runtime_creates_exactly_one_context_at_module_level() -> None:
         f"{GE_RUNTIME} calls {CONTEXT_FACTORY}() inside a function (lines {sorted(nested)}). "
         "Build the context once at import and hand it out — one per request is the LT-1b bug."
     )
+
+
+def test_reading_the_run_cache_cannot_reach_the_executor() -> None:
+    """Half D. 'Renders without re-executing', made structural rather than careful.
+
+    Timing proves nothing here — a fast page load may still have executed and a slow
+    one may not have. What proves it is that the module a page load reads through has
+    no path to the framework AT ALL: the import graph out of `RUN_CACHE` is walked
+    transitively, and half A's own reader says whether each node it lands on imports
+    Great Expectations. `GE_RUNTIME` imports it at module level, so the day a cache
+    read reaches the executor by any route, this fails.
+
+    The walk's own blindness is what it is guarded against, and the guard is that it
+    followed EVERY `app.*` import it saw. A "did it reach at least these modules"
+    guard cannot do that job: `runs.py` imports two modules directly, so the trivial
+    graph satisfies it — and the realistic regression is a deferred
+    `from app.dq.ge_runtime import run` inside a function, which is the idiom this
+    codebase uses everywhere and which a resolver that only tries `<module>/<name>.py`
+    drops on the floor.
+
+    The counting proof, against the real framework, is in
+    `tests/test_run_records_on_postgres.py`.
+    """
+    reached: set[pathlib.Path] = set()
+    unfollowed: list[str] = []
+    frontier = [RUN_CACHE]
+    while frontier:
+        current = frontier.pop()
+        if current in reached:
+            continue
+        reached.add(current)
+        found, missed = _app_imports(current)
+        unfollowed += missed
+        frontier += [p for p in found if p not in reached]
+
+    assert not unfollowed, (
+        f"the walk could not follow {unfollowed}. A node it silently drops is a node it cannot "
+        "see the framework behind — which is exactly how the deferred-import idiom this "
+        "codebase uses everywhere would walk straight past it."
+    )
+    importers = [str(p) for p in sorted(reached) if _imports_ge(REPO / p)]
+    assert not importers, (
+        f"a page load reads the cache through {RUN_CACHE}, and {importers} on that import graph "
+        f"imports {NEEDLE}. Rendering a stored run must not be able to run one (SPEC F9)."
+    )
+
+
+def _app_imports(relative: pathlib.Path) -> tuple[list[pathlib.Path], list[str]]:
+    """The files under `app/` this file imports — and the `app.*` imports it could NOT follow.
+
+    Two spellings resolve differently and both have to work. `from app.dq import runs`
+    names a MODULE, so the path is the package plus the alias; `from app.dq.ge_runtime
+    import run` names a FUNCTION inside one, so `app/dq/ge_runtime/run.py` does not
+    exist and the module itself is what must be followed.
+
+    An `app.*` import that resolves to neither is RETURNED rather than dropped, the
+    same way `tests/test_db_privilege_split.py` fails on an environment read it cannot
+    follow: a scan that silently loses a node proves nothing about where it could not
+    reach.
+    """
+    found: list[pathlib.Path] = []
+    unfollowed: list[str] = []
+
+    def resolve(named: str, *candidates: pathlib.Path) -> None:
+        for candidate in candidates:
+            if (REPO / candidate).exists():
+                found.append(candidate)
+                return
+        unfollowed.append(f"{relative}: {named}")
+
+    for node in ast.walk(_parse(REPO / relative)):
+        if isinstance(node, ast.ImportFrom) and (module := node.module or "").startswith("app"):
+            package = pathlib.Path(module.replace(".", "/"))
+            for alias in node.names:
+                resolve(
+                    f"{module}.{alias.name}",
+                    package / f"{alias.name}.py",
+                    package.with_suffix(".py"),
+                )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("app"):
+                    resolve(alias.name, pathlib.Path(alias.name.replace(".", "/") + ".py"))
+    return found, unfollowed

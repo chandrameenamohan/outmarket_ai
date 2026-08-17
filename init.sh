@@ -30,15 +30,22 @@ if [ ! -f .env ]; then
   Required keys are listed in .env.example."
 fi
 
-# Only the key this script and the gate actually read. Checked for a NON-EMPTY
-# value and for the .env.example placeholders, because a plain `grep '^KEY='`
-# passes on the blank/placeholder file that `cp .env.example .env` produces.
-grep -qE '^SUPABASE_DB_URL_DIRECT=..' .env \
-  || die "SUPABASE_DB_URL_DIRECT missing or empty in .env  (see .env.example)"
-if grep -qE '^SUPABASE_DB_URL_DIRECT=.*(:PASSWORD@|\.PROJECT\.)' .env; then
-  die "SUPABASE_DB_URL_DIRECT still contains the .env.example placeholders — fill in the real values"
-fi
-ok "SUPABASE_DB_URL_DIRECT present"
+# The three DSNs this script and the app actually connect with. Each is checked for
+# a NON-EMPTY value and for the .env.example placeholders, because a plain
+# `grep '^KEY='` passes on the blank/placeholder file `cp .env.example .env` leaves.
+#
+# ANALYSIS and SYSTEM are the privilege split of SPEC §3.1 (app/db/roles.sql) and
+# are as required as DIRECT: an .env carrying only DIRECT is a pre-split .env, and
+# every application module would die on a missing key one confusing layer later.
+for key in SUPABASE_DB_URL_DIRECT SUPABASE_DB_URL_ANALYSIS SUPABASE_DB_URL_SYSTEM; do
+  grep -qE "^${key}=.." .env || die "$key missing or empty in .env  (see .env.example)
+
+  ANALYSIS and SYSTEM are minted by app/db/roles.sql — read its header for the
+  command that creates the roles and the grants each one gets."
+  ! grep -qE "^${key}=.*(:PASSWORD@|\.PROJECT\.)" .env \
+    || die "$key still contains the .env.example placeholders — fill in the real values"
+  ok "$key present"
+done
 
 # ---------------------------------------------------------------------------
 say "smoke: database"
@@ -56,8 +63,12 @@ import psycopg
 # seed/MANIFEST.md — the three tables everything downstream assumes exist.
 TABLES = ("customers", "orders", "payments")
 
-with psycopg.connect(os.environ["SUPABASE_DB_URL_DIRECT"], connect_timeout=15) as c:
+# Opened as the ANALYSIS role, not as the owner. A table `postgres` can see but
+# `dq_analyst` cannot is invisible to the whole product, so this smoke test asks
+# the role that will actually do the reading (SPEC §3.1, app/db/roles.sql).
+with psycopg.connect(os.environ["SUPABASE_DB_URL_ANALYSIS"], connect_timeout=15) as c:
     ver = c.execute("select version()").fetchone()[0].split(",")[0]
+    who = c.execute("select current_user").fetchone()[0]
     present = {
         r[0]
         for r in c.execute(
@@ -65,13 +76,24 @@ with psycopg.connect(os.environ["SUPABASE_DB_URL_DIRECT"], connect_timeout=15) a
         ).fetchall()
     }
 
+# One round trip, purely to prove the second credential is the one it claims to be.
+# A SYSTEM DSN holding the owner's password would pass every check above and quietly
+# undo the split.
+with psycopg.connect(os.environ["SUPABASE_DB_URL_SYSTEM"], connect_timeout=15) as c:
+    sysuser = c.execute("select current_user").fetchone()[0]
+
 missing = [t for t in TABLES if t not in present]
 if missing:
     raise SystemExit(
-        f"   connected, but the seeded tables are missing: {missing}\n"
+        f"   connected as {who}, but the seeded tables are missing: {missing}\n"
         f"   run: python3 seed/seed_demo_data.py"
     )
-print(f"   ok   {ver}  ·  {', '.join(TABLES)} present")
+if (who, sysuser) != ("dq_analyst", "dq_system"):
+    raise SystemExit(
+        f"   the split DSNs connect as ({who}, {sysuser}), not (dq_analyst, dq_system).\n"
+        f"   SUPABASE_DB_URL_ANALYSIS / _SYSTEM must carry the roles app/db/roles.sql creates."
+    )
+print(f"   ok   {ver}  ·  {', '.join(TABLES)} present  ·  as {who} / {sysuser}")
 PY
 
 # ---------------------------------------------------------------------------

@@ -37,17 +37,31 @@ larger the cap comes back and the disclosure has to already exist.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
+from typing import Any
 
 import pytest
 
-from app.dq import status
-from conftest import REPO, pending, source_files
+from app.dq import normalise, status
+from conftest import REPO, module_constant, pending, source_files
 
 # The one writer. Same shape as INV-3's GE_RUNTIME constant: one place to change
 # if the module moves, and the gate follows.
 STATUS_MODULE = pathlib.Path("app/dq/status.py")
+
+# The module that builds the asset, and therefore the module that owns the row cap
+# the marker is derived from. It imports the framework, so the offline gate reads
+# its literals rather than importing it.
+GE_RUNTIME = pathlib.Path("app/dq/ge_runtime.py")
+
+# One rule, one framework result, in the shape `to_json_dict()` produces (LT-1a).
+# The transport checks below vary the ASSET and hold this constant.
+SPEC: dict[str, Any] = {
+    "type": "expect_column_values_to_be_between",
+    "kwargs": {"column": "order_total", "min_value": 0.0},
+}
 
 # Production code only, both languages. `web/app` is the Next route tree and holds
 # no node_modules. Tests are allowed to NAME these sentences in prose — this file
@@ -60,10 +74,42 @@ TEXT_SCANNED += sorted((REPO / "web/app").rglob("*.tsx")) + sorted((REPO / "web/
 # `sampled\s+[\d,]+\s*/` matches the rendered clause and NOT a `sampled` field on a
 # record — the field is how the marker travels, and banning it would ban the
 # mechanism instead of the second copy.
+#
+# The third is INV-4's headline sentence, `status.magnitude()`: "150 violating rows ·
+# of 500,000 rows scanned · 0.03%". It is PAIRED rather than matched on either half,
+# and both halves are load-bearing. A bare `violating rows` false-positives on
+# `app/dq/normalise.py`, which quotes "0 violating rows" in a docstring explaining why
+# an errored rule renders none; a bare `rows scanned` false-positives on
+# `app/rules/suggest.py`, which composes F3's evidence line — a different sentence
+# with a different writer. Only the two together are this sentence.
 COMPOSED = (
     re.compile(r"\b(" + "|".join(v.upper() for v in status.VERDICTS) + r")\b"),
     re.compile(r"sampled\s+[\d,]+\s*/"),
+    re.compile(r"violating rows.{0,40}rows scanned"),
 )
+
+
+def _normalised(scan: normalise.Scan, element_count: int = 500_000) -> normalise.Result:
+    """`SPEC` failing on 150 rows, read through F9 against the given asset definition."""
+    report = {
+        "success": False,
+        "results": [
+            {
+                "success": False,
+                "expectation_config": {
+                    "type": SPEC["type"],
+                    "kwargs": {**SPEC["kwargs"], "batch_id": "postgres-orders"},
+                },
+                "result": {
+                    "element_count": element_count,
+                    "unexpected_count": 150,
+                    "partial_unexpected_list": [-450.0],
+                },
+                "exception_info": {"raised_exception": False, "exception_message": None},
+            }
+        ],
+    }
+    return normalise.normalise([SPEC], report, scan)[0]
 
 
 def atom_for(verdict: str) -> str:
@@ -73,6 +119,11 @@ def atom_for(verdict: str) -> str:
 
 def test_status_atom_formatter_is_the_only_writer() -> None:
     """One function emits 'FAILED · sampled 100,000 / 512,400'. Nothing else formats a verdict.
+
+    The same holds for the handful of load-bearing sentences beside it, INV-4's
+    magnitude line included — "150 violating rows · of 500,000 rows scanned · 0.03%"
+    is what SPEC F13 states verbatim, and F13's dashboard is exactly where somebody
+    retypes it in TSX because reaching for the payload felt like more work.
 
     Enforced as an import-boundary check in the style of INV-3: the reserved text
     is read OUT of the module rather than duplicated into the test, so the check
@@ -87,6 +138,10 @@ def test_status_atom_formatter_is_the_only_writer() -> None:
     text against status_atom() itself, which no amount of assembly can fake.
     """
     assert (REPO / STATUS_MODULE).exists(), f"{STATUS_MODULE} is the designated writer and is gone"
+    assert any(p.suffix == ".tsx" for p in TEXT_SCANNED) and len(TEXT_SCANNED) > 5, (
+        f"the scan collected {len(TEXT_SCANNED)} files. It covers app/ AND web/app's route "
+        "tree; if either side stops being collected this check goes green on a second copy."
+    )
     owned = [
         status.REVIEW_CAVEAT,
         status.COMPILED_TOKEN,
@@ -94,6 +149,9 @@ def test_status_atom_formatter_is_the_only_writer() -> None:
         status.NOTHING_SAVED,
         status.UNSETTLED_ATOM,
         status.ERRORED_DETAIL,
+        status.NEGLIGIBLE_SHARE,
+        status.MULTI_COLUMN_LIMIT,
+        status.UNCLEAR_REQUEST,
     ]
     offenders = []
     for path in TEXT_SCANNED:
@@ -188,7 +246,30 @@ def test_no_shipping_code_path_constructs_a_capped_asset() -> None:
 
 
 def test_sampling_marker_survives_normalisation_and_cache() -> None:
-    pending("needs F9 result normalisation")
+    """Transport layer. The rendered atom travels IN the payload; nobody recomposes it.
+
+    A cache is where a disclosure goes to get lost: the marker is derived, the
+    payload is JSON, and a reader that stores the verdict and reconstructs the
+    sentence has one code path where the sampling clause is optional. So the whole
+    atom is a field, it survives `json.dumps`/`json.loads` unchanged, and the counts
+    ride alongside it — a reader has the disclosure before it has anything to
+    recompose it from.
+
+    ponytail: the cache exercised here is the serialisation, which is what a cache
+    stores. The run record that holds it is B15's, and it stores exactly this dict.
+    """
+    result = _normalised(normalise.Scan("orders", 500_000, 100_000))
+    assert result.sampled
+    assert "sampled 100,000 / 500,000" in result.atom
+
+    cached = json.loads(json.dumps(result.record()))
+    assert cached["status"] == result.atom, "the atom did not survive the round trip intact"
+    assert "sampled 100,000 / 500,000" in cached["status"], (
+        f"the cached verdict reads {cached['status']!r}. INV-5: the disclosure is INSIDE the "
+        "status token, so it has to be inside the string that is stored, not next to it."
+    )
+    counts = (cached["sampled"], cached["scanned_rows"], cached["total_rows"])
+    assert counts == (True, 100_000, 500_000), f"the counts behind the clause arrived as {counts}"
 
 
 @pytest.mark.e2e
@@ -217,10 +298,35 @@ def test_the_sampling_marker_comes_from_the_asset_definition_not_from_ge_output(
     With the cap off at this scale the honest assertion is the pair: an uncapped
     asset yields a result marked not-sampled, and a capped one (the mechanism
     exercised, not shipped) yields one marked sampled with the cap it used.
+
+    The decoupling is asserted by holding the framework's output CONSTANT and
+    changing only the asset definition: one report, two scans, opposite markers. No
+    reading of `element_count` can produce that, which is the property under test.
+    The origin itself is the row limit declared in the module that builds the asset,
+    read out of the source because that module cannot be imported offline; the `ge`
+    layer runs the same constant against the real table
+    (`tests/test_result_normalisation.py::test_run_against_seeded_orders_reports_the_planted_defect_counts`).
     """
-    pending(
-        "needs F9's result model (app/dq/normalise.py). app/dq/ge_runtime.py already builds the "
-        "asset and executes through it — _batch() is real and the `ge` layer drives it against "
-        "the seeded table — but run() hands back raw framework output with no run record and no "
-        "`sampled` field, so the marker has nowhere yet to be carried to"
+    assert module_constant(str(GE_RUNTIME), "ROW_LIMIT") is None, (
+        "the shipping asset declares a row cap. SPEC O-2: none ships at this scale — and the "
+        "day one does, this is the value every disclosure downstream is derived from."
+    )
+
+    capped = _normalised(normalise.Scan("orders", 500_000, 100_000))
+    whole = _normalised(normalise.Scan("orders", 500_000))
+    assert capped.raw["result"]["element_count"] == whole.raw["result"]["element_count"], (
+        "the two readings must share one framework output, or this check proves nothing about "
+        "where the marker came from"
+    )
+    assert capped.sampled and not whole.sampled, (
+        "identical framework output produced identical markers, so the marker is being read "
+        "off the framework — which cannot distinguish a capped run from a small table (LT-1a)"
+    )
+    assert "sampled 100,000 / 500,000" in capped.atom
+    assert "sampled" not in whole.atom
+
+    small = _normalised(normalise.Scan("orders", 500_000), element_count=10)
+    assert not small.sampled, (
+        "a report whose element_count is 10 was marked sampled against an uncapped asset — "
+        "inferred from the framework's count rather than carried from the asset definition"
     )

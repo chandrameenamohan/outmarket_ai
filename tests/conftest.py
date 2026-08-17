@@ -14,6 +14,7 @@ This file is the one exemption, because pending() is where pytest.skip is called
 
 from __future__ import annotations
 
+import ast
 import os
 import pathlib
 import urllib.error
@@ -140,6 +141,24 @@ def driver(chromium: Any, app_url: str) -> Iterator[Driver]:
     drv.page.on("requestfailed", lambda r: drv.failed_requests.append(r.url))
     yield drv
     context.close()
+
+
+def module_constant(relative: str, name: str) -> Any:
+    """Read one module-level literal out of a source file, without importing it.
+
+    `app/dq/ge_runtime.py` imports Great Expectations at module level, so `make
+    check`'s interpreter cannot import it — and the two facts that module owns which
+    the offline gate has to pin (the shipping `result_format`, and the row cap that
+    is INV-5's origin) are plain literals sitting at its top. `ast.literal_eval` on
+    the assignment reads exactly what will run, which a text scan cannot claim.
+    """
+    tree = ast.parse((REPO / relative).read_text(), filename=relative)
+    for node in tree.body:
+        target = node.target if isinstance(node, ast.AnnAssign) else None
+        targets = [target] if target else getattr(node, "targets", [])
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets) and node.value:  # type: ignore[attr-defined]
+            return ast.literal_eval(node.value)  # type: ignore[attr-defined]
+    raise AssertionError(f"{relative} declares no module-level {name}")
 
 
 def source_files(*subdirs: str) -> list[pathlib.Path]:

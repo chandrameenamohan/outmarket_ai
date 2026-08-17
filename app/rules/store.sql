@@ -7,10 +7,12 @@
 -- if the one statement that says the words "update" and "delete" lives here,
 -- where it is the refusal rather than a route to one.
 --
--- 1 · APPEND-ONLY, enforced by a trigger rather than by a role grant. A grant is
---     bypassed by the superuser this deliberate take-home connects as, and a role
---     that "does not issue UPDATE" is a promise about code we would then have to
---     keep by hand. The trigger refuses UPDATE, DELETE and TRUNCATE from every
+-- 1 · APPEND-ONLY, enforced by a trigger rather than by a role grant. The role
+--     split in app/db/roles.sql is real now and still cannot do this job: the
+--     connection that runs this file OWNS the table, and a REVOKE against an
+--     owner is a no-op. Grants stop the store reaching `orders`; only the trigger
+--     stops it rewriting its own history.
+--     The trigger refuses UPDATE, DELETE and TRUNCATE from every
 --     role including the one that owns the table, so "there is no way to edit a
 --     rule quietly" is a fact about the database (F6). It is FOR EACH STATEMENT,
 --     so a DELETE matching nothing is refused too — the refusal does not depend
