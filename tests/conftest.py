@@ -26,6 +26,19 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
+# No check ever writes to the schema the demo reads from. The rule store is
+# append-only by design (F6), so a check that writes CANNOT clean up after itself —
+# and an accepted junk rule would not merely be untidy, it would execute and count
+# toward coverage. Set before any test imports app/rules/store.py.
+#
+# UNCONDITIONAL, not `setdefault`. `make check-ge` sources `.env` with `set -a`, and
+# `DQ_SCHEMA` is a documented key in .env.example — so a `setdefault` guard is
+# switched off by the very variable the setup instructions tell an operator to set,
+# and the layer starts writing unremovable rules into the demo's own store. A debug
+# escape hatch is not worth a guard that fails open on a supported configuration.
+SCRATCH_SCHEMA = "dq_check"
+os.environ["DQ_SCHEMA"] = SCRATCH_SCHEMA
+
 
 def pending(what: str) -> NoReturn:
     """Skip with a loud, greppable reason. Never returns."""

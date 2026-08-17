@@ -1,0 +1,137 @@
+[
+  {
+    "type": "expect_column_values_to_not_be_null",
+    "family": "nulls",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} has a value",
+    "required": ["column"],
+    "optional": ["mostly"],
+    "checks": []
+  },
+  {
+    "type": "expect_column_values_to_be_null",
+    "family": "nulls",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is empty",
+    "required": ["column"],
+    "optional": ["mostly"],
+    "checks": []
+  },
+  {
+    "type": "expect_column_values_to_be_unique",
+    "family": "uniqueness",
+    "base": "ColumnMapExpectation",
+    "english": "No two rows share a {column}",
+    "required": ["column"],
+    "optional": ["mostly"],
+    "checks": []
+  },
+  {
+    "type": "expect_column_unique_value_count_to_be_between",
+    "family": "uniqueness",
+    "base": "ColumnAggregateExpectation",
+    "english": "{column} holds between {min_value} and {max_value} distinct values",
+    "required": ["column"],
+    "optional": ["min_value", "max_value"],
+    "checks": ["at_least_one_bound", "ordered_bounds"]
+  },
+  {
+    "type": "expect_column_values_to_be_in_set",
+    "family": "value sets",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is one of {value_set}",
+    "required": ["column", "value_set"],
+    "optional": ["mostly"],
+    "checks": ["non_empty_set"]
+  },
+  {
+    "type": "expect_column_values_to_not_be_in_set",
+    "family": "value sets",
+    "base": "ColumnMapExpectation",
+    "english": "No {column} is one of {value_set}",
+    "required": ["column", "value_set"],
+    "optional": ["mostly"],
+    "checks": ["non_empty_set"]
+  },
+  {
+    "type": "expect_column_values_to_be_between",
+    "family": "ranges",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is between {min_value} and {max_value}",
+    "required": ["column"],
+    "optional": ["min_value", "max_value", "mostly"],
+    "checks": ["at_least_one_bound", "ordered_bounds"]
+  },
+  {
+    "type": "expect_column_mean_to_be_between",
+    "family": "ranges",
+    "base": "ColumnAggregateExpectation",
+    "english": "The average {column} is between {min_value} and {max_value}",
+    "required": ["column"],
+    "optional": ["min_value", "max_value"],
+    "checks": ["at_least_one_bound", "ordered_bounds"]
+  },
+  {
+    "type": "expect_column_values_to_match_regex",
+    "family": "regex/format",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} matches the pattern {regex}",
+    "required": ["column", "regex"],
+    "optional": ["mostly"],
+    "checks": ["compilable_regex"]
+  },
+  {
+    "type": "expect_column_values_to_not_match_regex",
+    "family": "regex/format",
+    "base": "ColumnMapExpectation",
+    "english": "No {column} matches the pattern {regex}",
+    "required": ["column", "regex"],
+    "optional": ["mostly"],
+    "checks": ["compilable_regex"]
+  },
+  {
+    "type": "expect_column_value_lengths_to_be_between",
+    "family": "regex/format",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is between {min_value} and {max_value} characters long",
+    "required": ["column"],
+    "optional": ["min_value", "max_value", "mostly"],
+    "checks": ["at_least_one_bound", "ordered_bounds"]
+  },
+  {
+    "type": "expect_column_values_to_be_of_type",
+    "family": "type",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is stored as {type_}",
+    "required": ["column", "type_"],
+    "optional": ["mostly"],
+    "checks": ["known_sql_type"]
+  },
+  {
+    "type": "expect_column_values_to_be_in_type_list",
+    "family": "type",
+    "base": "ColumnMapExpectation",
+    "english": "Every {column} is stored as one of {type_list}",
+    "required": ["column", "type_list"],
+    "optional": ["mostly"],
+    "checks": ["non_empty_set", "known_sql_type"]
+  },
+  {
+    "type": "expect_table_row_count_to_be_between",
+    "family": "row count",
+    "base": "BatchExpectation",
+    "english": "The table holds between {min_value} and {max_value} rows",
+    "required": [],
+    "optional": ["min_value", "max_value"],
+    "checks": ["at_least_one_bound", "ordered_bounds"]
+  },
+  {
+    "type": "expect_column_to_exist",
+    "family": "column existence",
+    "base": "BatchExpectation",
+    "english": "The column {column} exists",
+    "required": ["column"],
+    "optional": [],
+    "checks": []
+  }
+]
