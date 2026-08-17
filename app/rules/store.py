@@ -37,47 +37,31 @@ functions of a list of revisions, so the workflow's rules are checkable without 
 database. That split is deliberate — the four unit checks in `tests/test_rule_store.py`
 drive the folds directly and run in `make check`, which has no network.
 
-ponytail: the write path connects with `SUPABASE_DB_URL_DIRECT`, which today is
-one credential with rights over everything. SPEC §3.1's split — a read-only role
-for the tables under analysis and a write-capable role scoped to this schema — is
-bead dq-5pb.2 and is not built. The DSN is named once, here, so that split is a
-one-line change; until then "the store never writes to the tables under analysis"
-rests on the fact that every statement in this module and in `store.sql` names
-`{schema}.rules` and nothing else —
+FOUR · IT CANNOT REACH THE TABLES UNDER ANALYSIS. The write path connects through
+`app/db/system.py` as `dq_system` (`SUPABASE_DB_URL_SYSTEM`), a role granted nothing
+at all on `public` — see `app/db/roles.sql`. Every statement in this module and in
+`store.sql` names `{schema}.rules` and nothing else, and
 `tests/test_rule_store.py::test_the_store_has_no_writer_that_skips_the_validator`
-reads the statement targets out of both files and asserts that set is exactly one.
+asserts that target set exhaustively; but that is a fact about THIS CODE, and a
+future bug would sail past it. The grants are what make it a fact about the
+CONNECTION — `tests/test_db_privilege_split.py` writes to `orders` on this very
+connection and shows PostgreSQL refusing it.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import os
 import pathlib
-import re
 import uuid
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
-import psycopg2
 from psycopg2.extras import Json
 
+from app.db import system
 from app.rules import schema as live
 from app.rules import validator
-
-# Same connection the rules will RUN against (INV-2's sibling constraint: an
-# identifier is verified against the database that will execute it, never a
-# different one). The pooler is 21% slower for that workload (LT-1b), and having
-# two DSNs here would be two databases to keep in agreement.
-DSN_VAR = "SUPABASE_DB_URL_DIRECT"
-
-# The system schema. An override exists for exactly one reason, and it is a real
-# one: the integration checks write real rules through the real front door, and
-# an append-only table cannot be cleaned up afterwards. They point at a scratch
-# schema so that `make check-ge` does not accumulate junk rules in the store the
-# demo reads from.
-SCHEMA_VAR = "DQ_SCHEMA"
-DEFAULT_SCHEMA = "dq"
 
 DDL = pathlib.Path(__file__).with_name("store.sql").read_text()
 
@@ -102,24 +86,6 @@ _WRITE = """
     values (%s, %s, %s, %s, %s, %s)
     returning written_at
 """
-
-_CONN: Any = None
-_ENSURED: str | None = None
-
-
-def _sql(statement: str) -> str:
-    """`{schema}` substituted by replacement rather than by `str.format`.
-
-    Not a style choice: store.sql's own comments show a stored spec, and
-    `{"type": ..., "kwargs": {...}}` is a format string full of unknown keys.
-    One substitution rule for all three statements, so nobody has to remember
-    which of them may mention a brace.
-    """
-    return statement.replace("{schema}", _schema())
-
-
-class Unavailable(RuntimeError):
-    """The store could not be reached. The operator's problem, not the author's."""
 
 
 class UnknownRule(LookupError):
@@ -232,8 +198,8 @@ def set_status(rule_id: str, status: str, reason: str | None = None) -> Revision
 
 def revisions(table: str | None = None, rule_id: str | None = None) -> tuple[Revision, ...]:
     """Every revision ever written, oldest first within each rule."""
-    with _connection() as conn, conn.cursor() as cur:
-        cur.execute(_sql(_READ), {"table": table, "rule": rule_id})
+    with system.cursor(DDL) as cur:
+        cur.execute(system.sql(_READ), {"table": table, "rule": rule_id})
         return tuple(Revision(r[0], r[1], r[2], r[3], r[4], r[5], r[6]) for r in cur.fetchall())
 
 
@@ -273,48 +239,10 @@ def latest(rule_id: str) -> Revision:
 
 def _append(rev: Revision) -> Revision:
     """The only INSERT in the product. Every writer above arrives here."""
-    with _connection() as conn, conn.cursor() as cur:
+    with system.cursor(DDL) as cur:
         cur.execute(
-            _sql(_WRITE),
+            system.sql(_WRITE),
             (rev.rule_id, rev.revision, rev.table, Json(dict(rev.spec)), rev.status, rev.reason),
         )
         (written_at,) = cur.fetchone()
     return dataclasses.replace(rev, written_at=written_at)
-
-
-def _connection() -> Any:
-    """One connection for the process, with the schema established on the way up.
-
-    Connecting costs 1.16 s to Singapore (LT-1b), which is why it is not done per
-    call. The DDL is idempotent and runs once per connection rather than through a
-    migration tool — see the ceiling noted in store.sql.
-    """
-    global _CONN, _ENSURED
-    dsn = os.environ.get(DSN_VAR, "")
-    if not dsn:
-        raise Unavailable(
-            f"{DSN_VAR} is not set, so there is nowhere to store a rule. Load the "
-            "environment (`set -a; . ./.env; set +a`) — see .env.example."
-        )
-    try:
-        if _CONN is None or _CONN.closed:
-            _CONN = psycopg2.connect(dsn, connect_timeout=15)
-            _ENSURED = None
-        if _ENSURED != (schema := _schema()):
-            with _CONN, _CONN.cursor() as cur:
-                cur.execute(_sql(DDL))
-            _ENSURED = schema
-    except psycopg2.Error as exc:
-        _CONN = None
-        raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
-    return _CONN
-
-
-def _schema() -> str:
-    name = os.environ.get(SCHEMA_VAR) or DEFAULT_SCHEMA
-    if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-        raise Unavailable(
-            f"{SCHEMA_VAR}={name!r} is not a bare lowercase identifier, and it is substituted "
-            "into SQL. Rename the schema rather than quoting it."
-        )
-    return name

@@ -312,8 +312,8 @@ def test_no_mutation_route_exists_for_a_stored_rule_or_run_record() -> None:
     """Write-resistance, on both surfaces a mutation could arrive through.
 
     The SQL surface: no statement anywhere in `app/` updates, deletes or truncates
-    anything. The one file that says those words is `store.sql`, where they name
-    what the trigger REFUSES.
+    anything. The only files that say those words are `store.sql` and
+    `app/dq/runs.sql`, where they name what each trigger REFUSES.
 
     The HTTP surface: no route handler answers PUT, PATCH or DELETE, and nothing
     in the route tree sends one. A run record inherits this for free (B15) — the

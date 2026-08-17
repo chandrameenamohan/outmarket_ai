@@ -114,6 +114,30 @@ def validate(
     (`min_value=0` comes back as `0.0`), which is what the store holds and what F7
     compiles: nothing can reach the store that did not come out of this function.
     """
+    sanity(etype, kwargs, table, columns)
+    return _construct(etype, kwargs)
+
+
+def sanity(
+    etype: str,
+    kwargs: Mapping[str, Any],
+    table: str,
+    columns: Collection[str] | None = None,
+) -> None:
+    """Layer 1 alone: our own checks, with no framework anywhere in reach.
+
+    It exists as a name because F3 needs exactly this and nothing more. A proposal is
+    not stored and not run, so it does not need the framework's constructor — but a
+    proposal with an inverted bound or a hallucinated column is still worthless on a
+    review screen, and re-typing these five checks there would be a second opinion
+    that drifts from this one. So the generator calls this, and the store calls
+    `validate()`, which is this plus the framework.
+
+    It returns NOTHING, deliberately: only `validate()` produces a storable spec, so
+    a caller cannot mistake layer 1 for the whole door. That is what keeps INV-2's
+    "GE instantiates a rule before anything persists it" true — this function has no
+    return value to persist.
+    """
     entry = _entry(etype)
     _known_kwargs(etype, entry, kwargs)
     _required_kwargs(etype, entry, kwargs)
@@ -121,7 +145,6 @@ def validate(
     for name in entry["checks"]:
         CHECKS[name](etype, kwargs)
     _identifiers(etype, kwargs, table, columns)
-    return _construct(etype, kwargs)
 
 
 def _entry(etype: str) -> dict[str, Any]:

@@ -34,12 +34,11 @@ INV-2's *second* layer and is worthless on its own; the per-type sanity table in
 `tests/test_inv2_authoring_rejection.py::test_framework_alone_would_let_ten_of_these_through`
 re-asserts that hole through this module so it cannot rot into an assumption.
 
-STILL TO LAND HERE, and this is where it belongs: the sampling marker, and the
-`result_format` that carries F13's identifier columns (B14a/B14b). This module is
-the last code that sees the asset definition, and the framework records nothing
-that distinguishes a capped run from an honest run over a smaller table — so
-INV-5's marker cannot be recovered downstream and has to originate at the asset.
-The cap itself does not ship (SPEC O-2); the disclosure it feeds does.
+3 · THE SAMPLING MARKER ORIGINATES HERE, in `ROW_LIMIT`, because this module is
+    the last code that sees the asset definition and the framework records nothing
+    that distinguishes a capped run from an honest run over a smaller table. INV-5's
+    marker therefore cannot be recovered downstream. The cap itself does not ship
+    (SPEC O-2); the disclosure it feeds does, carried by `app/dq/normalise.py::Scan`.
 """
 
 from __future__ import annotations
@@ -61,14 +60,34 @@ from pydantic.v1 import ValidationError
 # no new state to gitignore and nothing to clean up between runs (LT-1a).
 _CONTEXT = gx.get_context(mode="ephemeral")
 
-# The connection rules execute against. The pooler is 21% slower on identical
-# work (LT-1b), so the direct connection is not a preference, it is the decision.
-DSN_VAR = "SUPABASE_DB_URL_DIRECT"
+# The connection rules execute against: a role that holds SELECT on the tables
+# under analysis and no other privilege anywhere (SPEC §3.1, app/db/roles.sql). A
+# rule is a read, so this path never needs more, and PostgreSQL now refuses it more
+# rather than this module promising not to ask. Still the direct connection, port
+# 5432 — the pooler is 21% slower on identical work (LT-1b).
+DSN_VAR = "SUPABASE_DB_URL_ANALYSIS"
 
 # One datasource, one batch definition per table, both for the life of the process
 # — registering either twice raises, and they are pure configuration.
 _SOURCE: Any = None
 _BATCHES: dict[str, Any] = {}
+
+# THE ASSET DEFINITION'S CAP, and INV-5's marker at its origin. `None` is the whole
+# table: no cap ships at this scale (SPEC O-2, LT-1b). It is a named constant rather
+# than an absence because the framework records NOTHING that distinguishes a capped
+# run from an honest run over a smaller table (LT-1a) — so the marker cannot be
+# recovered downstream, and `_batch()` below is the last code that knows. Switching
+# a cap on is a value change here plus the query asset `_batch()` refuses to build.
+ROW_LIMIT: int | None = None
+
+# SUMMARY, and COMPLETE is never emitted. SUMMARY carries the violating count and a
+# bounded sample of the offending values, which is what F13 renders; COMPLETE drops
+# the LIMIT from the sample query and materialises every offending row in this
+# process AND in the stored raw output — 500,031 values in the measured wide case
+# (LT-1a). That is a memory and storage argument, not a latency one: the measurement
+# does not support a latency claim. `unexpected_index_column_names` is added per call
+# because the identifier column is a property of the table, not of this module.
+RESULT_FORMAT: dict[str, Any] = {"result_format": "SUMMARY"}
 
 
 class Rejected(ValueError):
@@ -94,6 +113,19 @@ class Unavailable(RuntimeError):
 def context() -> Any:
     """The process's one DataContext. Ask for it; never build one."""
     return _CONTEXT
+
+
+def connect() -> None:
+    """Register the datasource NOW, so no request ever pays for it. Called at boot.
+
+    `_source()` is lazy, so without this the FIRST run of a process pays the connect
+    inside the number a user is watching. Measured on the live table: the first rule
+    of a cold process costs 6.43 s against 2.98 s for the same rule warm. A server
+    calls this once before it starts serving (`app/api/server.py`), which is also the
+    only arrangement that keeps INV-3 true — one context and one datasource for the
+    process, handed out, never built inside a request handler.
+    """
+    _source()
 
 
 def registry() -> tuple[str, ...]:
@@ -167,7 +199,9 @@ def compile_suite(name: str, specs: Sequence[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def run(name: str, specs: Sequence[dict[str, Any]], table: str) -> Any:
+def run(
+    name: str, specs: Sequence[dict[str, Any]], table: str, identifiers: Sequence[str] = ()
+) -> Any:
     """Compile and execute against the real table. Raw framework output, as plain JSON.
 
     Compiling and running in one call is what makes "GE executes the produced
@@ -182,16 +216,22 @@ def run(name: str, specs: Sequence[dict[str, Any]], table: str) -> Any:
     a name it has already resolved through `app/rules/schema.py::columns()` — which
     is the SPEC §3.1 check, and which the caller needs the column set from anyway.
 
-    ponytail: no `result_format`, so the framework's default stands and the
-    per-rule cost stays a bounded aggregate (LT-1a). F13 wants
-    `unexpected_index_column_names` for *"#88231 −450.00"*, and that needs a
-    per-table identifier column this signature deliberately does not carry yet —
-    B14a adds it, along with the normalisation that turns this dict into F9's
-    three states. Until then the raw shape is the honest thing to return:
-    `to_json_dict()` has already flattened Decimal and the enums, so it is
+    `identifiers` are the columns that name an offending ROW rather than describe
+    it — the primary key, from `app/rules/schema.py::primary_key()`. They turn
+    F13's sample from *"−450.00"* into *"#88231 −450.00"*, at the cost of one extra
+    bounded SELECT per rule (LT-1a). They are a caller's to supply for the same
+    reason `table` is: this module does not read `information_schema`, and the
+    caller has already resolved the table it is running against.
+
+    The return value stays raw on purpose — `app/dq/normalise.py` is what turns it
+    into F9's three states, and it needs the whole thing to keep alongside them
+    (INV-4). `to_json_dict()` has already flattened Decimal and the enums, so it is
     `json.dumps`-able as it stands.
     """
-    return _batch(table).validate(_suite(name, specs)).to_json_dict()
+    result_format = dict(RESULT_FORMAT)
+    if identifiers:
+        result_format["unexpected_index_column_names"] = list(identifiers)
+    return _batch(table).validate(_suite(name, specs), result_format=result_format).to_json_dict()
 
 
 def _suite(name: str, specs: Sequence[dict[str, Any]]) -> Any:
@@ -218,7 +258,19 @@ def _batch(table: str) -> Any:
     demo database has one schema. Ceiling: a table outside the search path is
     unreachable; upgrade path is the connection string, which is a second
     datasource, not a second parameter here.
+
+    The refusal below is what welds `ROW_LIMIT` to the asset it claims to describe.
+    Without it the constant and this function are coupled by comment only, and
+    setting it to a number would make every disclosure downstream state a sample
+    that was never taken — a false INV-5 marker AND a wrong INV-4 denominator from a
+    one-token edit, with nothing between the edit and a user reading it.
     """
+    if ROW_LIMIT is not None:
+        raise NotImplementedError(
+            f"ROW_LIMIT={ROW_LIMIT} but this builds a WHOLE-TABLE asset, so the cap would be "
+            "disclosed and never applied. A row cap needs a query asset, which LT-1b measured "
+            "as a net loss and which breaks the two type expectations outright (SPEC O-2)."
+        )
     if table not in _BATCHES:
         asset = _source().add_table_asset(name=table, table_name=table)
         _BATCHES[table] = asset.add_batch_definition_whole_table(name="whole_table")

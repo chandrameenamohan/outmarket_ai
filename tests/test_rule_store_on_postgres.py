@@ -28,6 +28,8 @@ from typing import Any
 import psycopg2
 import pytest
 
+from app.db import system
+
 TABLE = "orders"
 
 SPEC: dict[str, Any] = {
@@ -127,15 +129,15 @@ def test_a_rule_walks_the_workflow_and_every_revision_stays_readable() -> None:
 def test_reaching_past_the_store_with_raw_sql_is_refused() -> None:
     """The check worth more than all the front-door ones: there IS no other door.
 
-    Raw SQL on the store's own connection, as the role that owns the table —
-    which is the strongest attacker this deliberate single-credential deployment
-    has (SPEC §3.1's role split is bead dq-5pb.2). A grant would not stop it; the
-    trigger does, and so do the two constraints, so "no way to edit them quietly"
-    is a property of the database rather than of this codebase's manners.
+    Raw SQL on the store's own connection, as `dq_system` — which OWNS this table,
+    so it is the strongest attacker the role split of SPEC §3.1 leaves standing and
+    the one privilege cannot touch: a REVOKE against an owner is a no-op. The
+    trigger stops it, and so do the two constraints, so "no way to edit them
+    quietly" is a property of the database rather than of this codebase's manners.
     """
     store = _store()
-    schema = store._schema()  # reaching past the front door is the whole point of this check
-    conn = store._connection()
+    # Reaching past the front door is the whole point of this check.
+    schema = system.schema()
     store.propose(TABLE, "expect_column_values_to_be_unique", {"column": "order_reference"})
 
     refusals = {
@@ -151,7 +153,7 @@ def test_reaching_past_the_store_with_raw_sql_is_refused() -> None:
     }
 
     for sql, expected in refusals.items():
-        with pytest.raises(psycopg2.Error) as exc, conn, conn.cursor() as cur:
+        with pytest.raises(psycopg2.Error) as exc, system.cursor(store.DDL) as cur:
             cur.execute(sql)
         assert expected in str(exc.value).lower(), (
             f"`{sql}` was answered with {exc.value!r} rather than a refusal naming {expected!r}. "
@@ -172,15 +174,14 @@ def test_no_stored_ge_configuration_exists_anywhere_in_the_schema() -> None:
     from app.dq import ge_runtime  # noqa: PLC0415
 
     store = _store()
-    schema = store._schema()
-    conn = store._connection()
+    schema = system.schema()
 
     written = store.propose(
         TABLE, "expect_column_values_to_be_between", {"column": "order_total", "min_value": 0}
     )
     store.set_status(written.rule_id, store.ACCEPTED)
 
-    with conn, conn.cursor() as cur:
+    with system.cursor(store.DDL) as cur:
         cur.execute(
             "select table_name, column_name from information_schema.columns "
             "where table_schema = %s",

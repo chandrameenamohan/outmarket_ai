@@ -44,17 +44,25 @@ in the `ge` layer:
 THE `type` FAMILY IS THE ONE THAT CANNOT RUN AGAINST A ROW CAP, and the constraint
 is enforced where a cap would be built — see `app/dq/ge_runtime.py::_batch`.
 
-ponytail: one English template per type, `{placeholder}` substituted verbatim, no
-grammar. `expect_column_values_to_be_between` with only a lower bound therefore
-reads "... is between 0 and None". The ceiling is deliberate — the phrasing of a
-half-bounded rule is F3/F4's problem, where the evidence line and the bounds are
-both in hand; upgrade path is a formatter there, not a second template here.
+THE SENTENCE IS RENDERED HERE, not by each consumer. This note used to defer the
+formatter to F3/F4 — "upgrade path is a formatter there, not a second template
+here" — and both of them then needed it: F3 shows a proposal for review, F4 shows
+a draft for confirmation, and the sentence is the thing a domain expert actually
+judges. A formatter in either one would be the second copy this module exists to
+prevent, so `english()` lives next to the templates and both call it.
+
+ponytail: one English template per type and three touches on top — the half-bound
+swap, a `mostly` clause, and `0.0 -> 0` / `['a','b'] -> a, b`. No grammar beyond
+that: "The table holds at least 1 rows" is the ceiling, and the upgrade path is a
+second template field per entry, which is fifteen more strings to keep true for a
+plural nobody has complained about.
 """
 
 from __future__ import annotations
 
 import json
 import pathlib
+from collections.abc import Mapping
 from typing import Any
 
 CATALOG_FILE = pathlib.Path(__file__).with_name("catalog.json")
@@ -64,3 +72,57 @@ ENTRIES: tuple[dict[str, Any], ...] = tuple(json.loads(CATALOG_FILE.read_text())
 # The allowed output set, for the generator and the validator. Same list, same
 # order, same length — derived, never re-typed.
 TYPES: tuple[str, ...] = tuple(e["type"] for e in ENTRIES)
+
+# The one phrase every two-bounded template shares, so a half-bounded rule reads as
+# one without a second template per entry. That every such template really does
+# contain it is asserted rather than assumed — see
+# `tests/test_f4_authoring.py::test_every_two_bounded_template_can_be_half_bounded`.
+BOUNDED = "between {min_value} and {max_value}"
+
+_BY_TYPE: dict[str, dict[str, Any]] = {e["type"]: e for e in ENTRIES}
+
+
+def english(etype: str, kwargs: Mapping[str, Any]) -> str:
+    """One rule as the sentence its author confirms (F3's proposal, F4's draft).
+
+    Pure, and it assumes only what `app/rules/validator.py::sanity()` has already
+    guaranteed: the type is in the catalog and a bounded rule carries at least one
+    bound, so the template always has a value to render.
+    """
+    template = _BY_TYPE[etype]["english"]
+    if BOUNDED in template:
+        template = template.replace(BOUNDED, _bounds(kwargs))
+    sentence = template.format(**{k: _readable(v) for k, v in kwargs.items()})
+    tolerance = kwargs.get("mostly")
+    if tolerance is not None and tolerance < 1:
+        sentence += f", in at least {tolerance:.0%} of rows"
+    return sentence
+
+
+def _bounds(kwargs: Mapping[str, Any]) -> str:
+    """A half-bounded rule has to read as a half-bounded sentence.
+
+    "Every order_total is between 0 and None" is not a sentence anyone can confirm,
+    and F4's headline case produces exactly that rule. Great Expectations drops an
+    unset bound from its normalised kwargs entirely while a freshly-parsed reply
+    can carry an explicit `None`, so both are handled by `.get(...) is None`.
+    """
+    if kwargs.get("max_value") is None:
+        return "at least {min_value}"
+    if kwargs.get("min_value") is None:
+        return "at most {max_value}"
+    return BOUNDED
+
+
+def _readable(value: Any) -> Any:
+    """`0.0` -> `0`, `['shipped', 'pending']` -> `shipped, pending`. Else, itself.
+
+    Great Expectations normalises an integer bound to a float, so a rule authored as
+    "never negative" would otherwise confirm as "at least 0.0" — a precision the
+    author did not ask for, on the one sentence they are being asked to approve.
+    """
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list | tuple):
+        return ", ".join(str(_readable(v)) for v in value)
+    return value

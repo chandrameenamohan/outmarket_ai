@@ -9,9 +9,10 @@ verdict and forget the disclosure, because it has no way to render a verdict at 
 except by asking for the whole atom.
 
 The same argument, one level out, covers the handful of load-bearing sentences —
-the review-queue caveat, the neutral compile token and its companion, the refusal
-line. They each exist here once. A second copy is not a style problem: it is two
-truths that drift apart silently, and nobody finds out until a user reads both.
+INV-4's magnitude line and the negligible-share token inside it, the review-queue
+caveat, the neutral compile token and its companion, the refusal line. They each
+exist here once. A second copy is not a style problem: it is two truths that drift
+apart silently, and nobody finds out until a user reads both.
 `tests/test_inv5_sampling_disclosure.py::test_status_atom_formatter_is_the_only_writer`
 fails the gate on any second copy in `app/` or `web/app/`, the same way INV-3's
 import boundary is enforced rather than agreed.
@@ -63,11 +64,76 @@ COMPILED_CAVEAT = "Compiling proves the rule is well-formed — never that it is
 # F4/F12 · an inexpressible rule is refused, and the refusal says what did not happen.
 NOTHING_SAVED = "Nothing was saved. Your coverage did not change."
 
+# F4 · the two refusals authoring has to be able to say out loud. Both are here for
+# the reason the module exists: they are the sentences that make "we refused" mean
+# something other than "it did not work", and a second copy of either would drift
+# from the catalog it is describing.
+#
+# The first is SPEC F4's own acceptance text, word for word, because a refusal a
+# user cannot act on is a refusal they will work around — this one names the
+# limitation AND its boundary, so the reader learns what the product does cover.
+MULTI_COLUMN_LIMIT = (
+    "Not supported yet — this rule compares two columns, and the current rule set "
+    "covers single-column and table-level checks only."
+)
+UNCLEAR_REQUEST = (
+    "This could not be read as a check on one column or on the table as a whole. "
+    "Name the column and say what would make a row wrong."
+)
+
+
+def refusal(explanation: str) -> str:
+    """The one shape a refusal takes: what could not be done, then what did not happen.
+
+    The second half is never optional and never a caller's to compose. "Nothing was
+    saved" is the claim a user has no way to verify from the screen, so it is welded
+    to every refusal for the same reason the sampling clause is welded to every
+    verdict — a disclosure a caller can forget is a disclosure that gets forgotten.
+
+    `explanation` may be one of the two constants above or a validator's own reason
+    (`app/rules/validator.py` writes those, and they already name the offending
+    thing). Either way the sentence a user reads ends the same way.
+    """
+    return f"{explanation} {NOTHING_SAVED}"
+
+
 # F13 · a rule that has not reported yet. Not a verdict; see the module docstring.
 UNSETTLED_ATOM = "PENDING · not yet reported"
 
 # F13 · an errored rule, in words, because ERRORED alone reads as a louder FAILED.
 ERRORED_DETAIL = "rule could not run"
+
+# F13 · the share a failure is too small to state honestly. A non-zero count whose
+# share rounds to "0.00%" reads as nothing happened, which is the one thing it is not.
+NEGLIGIBLE_SHARE = "<0.01%"
+
+
+def magnitude(unexpected_count: int, scanned_rows: int) -> str:
+    """How big a failure is: the count, the denominator it is a count OF, and the share.
+
+        150 violating rows · of 500,000 rows scanned · 0.03%
+
+    SPEC F13's sentence, minus the rule's own English statement, which
+    `app/rules/catalog.py::english()` already renders and which no second module
+    composes either. A count on its own is unjudgeable — 150 is a catastrophe in a
+    500-row table and a rounding error in 500,000 — so INV-4 needs the denominator
+    and the share, and they travel in the same string for the same reason the
+    sampling clause travels with the verdict: three numbers a caller can pick apart
+    are three numbers a caller can render two of.
+
+    THE DENOMINATOR IS `scanned_rows`, NEVER THE TABLE'S TOTAL. A share of rows
+    nobody looked at is a number the run cannot support, and it would also disagree
+    with the atom sitting beside it, which discloses the same denominator.
+
+    Full digits, like `status_atom`: this is a module where rounding a number is
+    rounding the truth. The one number that IS rounded — the share — never rounds
+    down to zero while the count is non-zero.
+    """
+    share = 100 * unexpected_count / scanned_rows if scanned_rows else 0.0
+    rendered = f"{share:.2f}%" if share == 0 or round(share, 2) else NEGLIGIBLE_SHARE
+    return SEPARATOR.join(
+        (f"{unexpected_count:,} violating rows", f"of {scanned_rows:,} rows scanned", rendered)
+    )
 
 
 @dataclass(frozen=True)
