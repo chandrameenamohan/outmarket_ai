@@ -74,7 +74,7 @@ import pathlib
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from psycopg2.extras import Json
 
@@ -175,6 +175,22 @@ class Record:
                 "count is a subset of the total, not a separate measurement (INV-5)"
             )
 
+    @property
+    def atom(self) -> str:
+        """The run's roll-up verdict as display text, with INV-5's clause welded in.
+
+        Here rather than at the reader, because this is the type that has already
+        proven the three numbers agree — `__post_init__` refuses a status outside the
+        vocabulary and a scanned count larger than the total, which are exactly the two
+        things `status.RuleResult` would otherwise re-check. The `cast` is what that
+        proof buys: the string is a `str` on a database row and a `Verdict` by the time
+        anything can call this.
+        """
+        reading = status.RuleResult(
+            cast(status.Verdict, self.status), self.scanned_rows, self.total_rows
+        )
+        return status.status_atom(reading)
+
     def payload(self) -> dict[str, Any]:
         """The record as the JSON a screen renders — the run's own payload, plus its identity."""
         return {
@@ -263,7 +279,21 @@ def latest(table: str) -> Record | None:
 
 
 def find(record_id: str) -> Record:
-    """One record by id — what `/runs/[recordId]` resolves, and what a re-run leaves alone."""
+    """One record by id — what `/runs/[recordId]` resolves, and what a re-run leaves alone.
+
+    A string that is not a uuid is an UNKNOWN RUN and not a database error. The id
+    arrives from a URL somebody pasted, so the malformed case is ordinary rather than
+    exceptional — and without this guard PostgreSQL refuses the `::uuid` cast in
+    `_READ`, which reaches the screen as "the server did not answer" instead of as
+    "there is no such record". The reader is told the same thing either way, and only
+    one of the two is true.
+    """
+    try:
+        uuid.UUID(record_id)
+    except ValueError as exc:
+        raise UnknownRun(
+            f"{record_id!r} is not a run record id, so no record was ever written under it"
+        ) from exc
     found = _read(record_id=record_id)
     if not found:
         raise UnknownRun(f"no run record {record_id!r} has ever been written here")

@@ -1,0 +1,46 @@
+# What must NEVER reach a build context, and what would make the image depend on
+# THIS machine. Both lists are short and both are load-bearing.
+#
+# 1. CREDENTIALS. `.env` is the only place secrets live (SPEC §3.1) and it is
+#    excluded here as well as in .gitignore, so a `COPY . .` cannot bake one into
+#    a layer even by accident. `docker compose` hands it to the CONTAINER at run
+#    time (`env_file:`), which is a different thing from putting it in an image:
+#    one is readable by anyone who pulls the image, the other is not.
+#
+# 2. THE HOST'S BUILD OUTPUT. `web/node_modules` is resolved for darwin/arm64 and
+#    `web/.next` was built against it; copying either would make the image a
+#    photograph of this laptop and would break on a reviewer's. The Dockerfiles
+#    run `npm ci` and `next build` themselves, from the committed lockfile, which
+#    is the only way "works from a clean checkout" can be true rather than hoped.
+
+.env
+.env.*
+!.env.example
+
+**/node_modules
+**/.next
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+
+.git
+.github
+.venv
+venv
+**/__pycache__
+*.py[cod]
+.mypy_cache
+.ruff_cache
+.pytest_cache
+
+# Nothing either service runs: the issue tracker, the agent scratch, the design
+# mockups, the brief, and the screenshots the browser layer diffs on the HOST.
+.beads
+.dolt
+.claude
+.codex
+.agents
+.sageox
+.bv
+design
+tests/e2e/__baselines__
+*.pdf

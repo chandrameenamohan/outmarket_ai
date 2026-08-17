@@ -74,8 +74,15 @@ def test_no_source_file_exceeds_the_size_threshold() -> None:
     """Covers the TypeScript side too. "This file is doing two jobs" is a craft
     threshold, not a Python one, and a 900-line `page.tsx` would otherwise walk
     straight past the only signal that catches it — eslint has no file-size rule
-    either. `web/app` is the route tree, and holds no node_modules."""
-    files = source_files("app", "tests") + list((REPO / "web/app").rglob("*.tsx"))
+    either.
+
+    The root is `web` and not `web/app`: the route tree holds no node_modules, which
+    is an argument for excluding the generated directories rather than for a narrower
+    root — a component moved one directory sideways would leave this scan silently.
+    Same change, same reason, as `tests/test_inv5_sampling_disclosure.py`'s."""
+    files = source_files("app", "tests") + [
+        p for p in (REPO / "web").rglob("*.tsx") if not {"node_modules", ".next"} & set(p.parts)
+    ]
     oversized = [
         (p.relative_to(REPO), n)
         for p in files

@@ -343,6 +343,30 @@ def test_the_stored_record_carries_the_statement_the_count_and_real_values() -> 
     )
 
 
+def test_an_id_that_is_not_a_record_id_is_an_unknown_run_and_not_a_database_error() -> None:
+    """A pasted link with a mangled id is an ordinary miss, and it never reaches SQL.
+
+    `/runs/<recordId>` takes its id from the address bar, so the malformed case is the
+    normal case — a truncated paste, a trailing bracket, an id from another system.
+    Without the guard the `::uuid` cast in `_READ` refuses it inside the database, and
+    the screen tells the reader the server did not answer, which is a different (and
+    false) statement about the same URL.
+
+    Offline, and that is the assertion as much as the exception type is: `find()`
+    rejects the shape before it opens a connection, so this runs inside `make check`
+    with no database anywhere. Both halves matter — an `UnknownRun` raised after a
+    round trip would still be a round trip spent on a string that cannot match.
+    """
+    for mangled in ("RECORD_FIXTURE_ID", "2f3a9c10-record-one", "", "../../etc/passwd"):
+        with pytest.raises(runs.UnknownRun) as refused:
+            runs.find(mangled)
+        assert repr(mangled) in str(refused.value), (
+            f"the refusal for {mangled!r} does not name it: {refused.value}. A reader who "
+            "pasted a link needs to see which id was not found, or they cannot tell a typo "
+            "from a record that was never written."
+        )
+
+
 def test_re_running_appends_a_new_record_and_edits_nothing() -> None:
     """Immutability, in the two places it can be lost: the id, and the SQL.
 

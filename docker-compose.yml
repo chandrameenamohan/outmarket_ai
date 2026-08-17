@@ -1,0 +1,71 @@
+# SPEC §3's second delivery path: a reviewer clones this repo, writes one `.env`,
+# runs one command, and has the product. The first path is the deployed URL.
+#
+#     docker compose up --build        then open http://localhost:3000
+#
+# CREDENTIALS ARE NEVER IN AN IMAGE. `env_file` hands `.env` to the running
+# container; `.dockerignore` keeps it out of every build context. The difference
+# matters: an image layer travels to whoever pulls it, a container environment
+# does not. Nothing here has a default password, a default DSN or a default token
+# — a missing key is a loud failure at boot, which is the correct one.
+#
+# There is no `database` service and there will not be one. SPEC §3 names
+# PostgreSQL 17.6 ON SUPABASE as both the analysis target and the system store,
+# and the 500,000-row demo dataset lives there (seed/MANIFEST.md). A local
+# Postgres would be a fourth environment nobody measured.
+
+services:
+  # The Python process. One per stack, deliberately: gx.get_context() installs a
+  # PROCESS-GLOBAL project (INV-3, LT-1b), so `docker compose up --scale api=2`
+  # is not a supported thing to do.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      # Fixed inside the container so the port mapping below is the only place a
+      # port is chosen. A DQ_API_PORT in .env is for running the process on the
+      # HOST (VERIFICATION.md §1) and must not silently move the socket compose
+      # is publishing.
+      DQ_API_PORT: "8000"
+    ports:
+      # Host side is overridable from the SHELL for the one failure a reviewer is
+      # most likely to hit — something already on 8000. Container side never moves.
+      - "${DQ_API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      # A listening socket is a READINESS signal here, not a liveness one:
+      # app/api/server.py::serve() calls ge_runtime.connect() — importing Great
+      # Expectations and opening the database — BEFORE it binds. So this goes
+      # green exactly when the service can answer, and `web` waits for that.
+      # Deliberately not an HTTP request to a route: every route this server has
+      # does real work, and a healthcheck should not run a query every 10 s.
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 5).close()"]
+      interval: 10s
+      timeout: 10s
+      # 12 × 10 s on top of start_period. The framework import plus the first
+      # connect is ~10 s warm and slower on a cold container; a stack that failed
+      # its healthcheck because Great Expectations was still importing would be a
+      # confusing way to tell a reviewer their credentials are fine.
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      # The service name, not localhost. Read server-side only — the browser never
+      # learns this address, which is why there is no CORS configuration anywhere
+      # in this stack (web/app/api.ts).
+      DQ_API_URL: http://api:8000
+    ports:
+      - "${DQ_WEB_HOST_PORT:-3000}:3000"
+    depends_on:
+      api:
+        # Not the default `service_started`. Next renders on the server, so the
+        # first screen a reviewer opens is a fetch to `api`; starting `web` first
+        # would greet them with the refusal banner and teach them to reload.
+        condition: service_healthy
+    restart: unless-stopped

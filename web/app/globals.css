@@ -1,20 +1,57 @@
-/* The shell's entire stylesheet. It exists to make the hygiene checks meaningful,
-   not to be a design system: F10-F13 bring their own styling with the screens.
+/* The Diglot Workbench, as a stylesheet.
+   Source: design/ux-variant-workbench.html, the direction the author selected
+   (SPEC Rev 0.4). Its idea is a BILINGUAL SPLIT — plain English and the Great
+   Expectations configuration as facing pages, warm paper for the English pane and
+   cool for the configuration — resting on one idea: the domain expert is not shown
+   the framework at all, which is F12's amended acceptance and a stronger reading of
+   its intent than the disclosure control it replaced. The mockup did that with
+   `body.expert .ge-pane { display: none }`; what ships does not render the pane in the
+   first place, and `body.expert` is left with the layout half. See the `.spread` rule.
 
-   ponytail: one light palette, no `prefers-color-scheme` block. Ceiling — a dark
-   variant doubles every visual-regression baseline (VERIFICATION.md §4.3) for a
-   shell with no design yet. Add it with the design, and re-approve the baselines
-   once, deliberately.
+   Tokens are copied from the mockup with FOUR contrast corrections, because the
+   mockup was never run through axe and `make check-ui` fails on a serious violation:
+   `--faint` moved #8a94a0 -> #646e79. It carries the eyebrow labels, which are 10px
+   text and need 4.5:1, and they sit on the two PANE TINTS rather than on white — the
+   warm #fbfaf6 is the tightest of the three grounds, and the first correction (#6b7683)
+   measured 4.45:1 there and was caught by axe on the rule permalink. #646e79 measures
+   5.2:1 on white and 5.0:1 on the warm pane. The other three tokens were already above
+   the bar and are unchanged; listed here so nobody re-measures them: --muted 5.8:1,
+   --accent 6.4:1, --pass 5.2:1.
 
-   ponytail: system font stack, no `next/font`. Ceiling — `next/font/google`
-   downloads Geist at BUILD time, which would make `npm run build` need the
-   network. init.sh promises the opposite. A self-hosted font goes in with the
-   design, as a file in the repo. */
+   ponytail: one light palette, no `prefers-color-scheme` block — unchanged from the
+   shell, and now for a second reason as well as the first. The first: a dark variant
+   doubles every visual-regression baseline (VERIFICATION.md §4.3), and this wave is
+   where the first baselines are finally written. The second: the mockup's dark tokens
+   have never been looked at by anyone, so shipping them would add a surface the gate
+   screenshots in neither mode. Ceiling: light only. Add dark with the bead that
+   approves a second set of baselines, deliberately.
+
+   ponytail: system font stack, no `next/font`. Ceiling — `next/font/google` downloads
+   at BUILD time, which would make `npm run build` need the network, and init.sh
+   promises the opposite. Workbench asks for Charter/Iowan for the English pane; the
+   stack below asks for them by name and falls through to Georgia, which every target
+   platform has. A self-hosted file goes in with the deploy bead, if ever. */
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --muted: #595959; /* 7.0:1 on white — above WCAG AA for body text */
+  --bg: #e9ecef; /* workshop grey ground */
+  --surface: #ffffff;
+  --en-tint: #fbfaf6; /* warm paper — the English pane */
+  --ge-tint: #f2f5f9; /* cool paper — the configuration pane */
+  --line: #ccd3da;
+  --line-soft: #dde2e8;
+  --ink: #1b242e;
+  --muted: #5c6773; /* 5.8:1 on white */
+  --faint: #646e79; /* 5.2:1 on white, 5.0:1 on the warm pane — raised from #8a94a0 */
+  --accent: #146b62; /* deep teal — interactive; 6.4:1 */
+  --accent-soft: #146b6218;
+  --fail: #b03a43;
+  --warn: #8a6410;
+  --pass: #2c7a4b;
+  --neutral-chip: #5c6773;
+  --shadow: 0 1px 3px rgba(20, 30, 40, 0.08);
+  --serif: "Charter", "Iowan Old Style", "Palatino", Georgia, serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 *,
@@ -25,24 +62,1125 @@
 
 body {
   margin: 0;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
 }
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+:is(button, a, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input {
+  font: inherit;
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  text-wrap: balance;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+}
+
+.eyebrow {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ============ TOP BAR — the role switch lives here, on every route ============ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 0 20px;
+  min-height: 54px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.brand .wordmark {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.brand .glyph {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.brand .sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.role-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 8px 0;
+}
+
+.role-switch .cap {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.role-seg {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.role-seg button {
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.role-seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+/* ============ PAGE ============ */
 
 main {
-  max-width: 44rem;
+  max-width: 1060px;
   margin: 0 auto;
-  padding: 3rem 1.5rem;
+  padding: 24px 20px 64px;
 }
 
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.75rem;
+.screen-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.screen-head h1 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.screen-head .who {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 p {
   margin: 0;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ============ THE ROLE DOOR ============ */
+
+.door {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.door form {
+  display: flex;
+}
+
+.door button {
+  flex: 1;
+  display: block;
+  text-align: left;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+
+.door button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.door .title {
+  display: block;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.door .why {
+  display: block;
+  font-size: 12px;
   color: var(--muted);
 }
+
+/* ============ CARD + THE SPREAD: EN | GE facing pages ============ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card-head code {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--line-soft);
+}
+
+.pane {
+  padding: 12px 16px 16px;
+  min-width: 0;
+}
+
+.pane .eyebrow {
+  margin-bottom: 6px;
+}
+
+.en-pane {
+  background: var(--en-tint);
+}
+
+.en-pane .stmt {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  line-height: 1.4;
+}
+
+.ge-pane {
+  background: var(--ge-tint);
+  border-left: 1px dashed var(--line);
+}
+
+/* `overflow-x: auto` is why every one of these carries `tabIndex={0}` in the markup: a
+   configuration is often wider than the pane it sits in, and axe fails a scrollable region
+   no keyboard can reach (`scrollable-region-focusable`, serious). `make check-ui` caught it
+   on the rules desk, which renders the longest ones. */
+.ge-pane pre {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+
+/* The mechanism the whole variant rests on: the domain expert never meets the
+   framework (SPEC F12, Rev 0.4). The mockup did it with
+   `body.expert .ge-pane { display: none }`; what ships is one step stronger — the
+   pane is not RENDERED for a request whose role is not engineer, so it is not in the
+   markup either, and "hidden entirely" is true of the document and not only of the
+   viewport. That leaves this class with the layout half of the job: with one pane
+   instead of two, the spread is one column. */
+body.expert .spread {
+  grid-template-columns: 1fr;
+}
+
+.evidence {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.evidence::before {
+  content: "▸ evidence ";
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* ============ CHIPS ============ */
+
+.atom {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--neutral-chip);
+  white-space: nowrap;
+}
+
+.atom.accepted {
+  color: var(--pass);
+  border-color: var(--pass);
+}
+
+.atom.rejected {
+  color: var(--fail);
+  border-color: var(--fail);
+}
+
+.atom.needs_review,
+.atom.proposed {
+  color: var(--warn);
+  border-color: var(--warn);
+  border-style: dashed;
+}
+
+/* The three run verdicts. The class is the verdict NAME, carried in the payload beside
+   the atom (app/dq/coverage.py); the text inside the chip is always the atom itself,
+   sampling clause and all. An atom with no verdict class — a table that has never been
+   run — keeps the neutral chip above, which is the right reading: NEVER RUN is not a
+   milder pass. */
+.atom.passed {
+  color: var(--pass);
+  border-color: var(--pass);
+}
+
+.atom.failed {
+  color: var(--fail);
+  border-color: var(--fail);
+}
+
+.atom.errored {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ============ ACTIONS ============ */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 240px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.actions input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+
+.refused {
+  padding: 16px;
+  border-left: 3px solid var(--fail);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ============ F10 · THE TABLE EXPLORER ============
+
+   Workbench's own arrangement: a sentence explaining the sort, then three labelled
+   buckets, each a card holding one table. The heading carries its ordinal because the
+   ordinal is the argument (app/dq/status.py::BUCKETS) — so nothing in here may reorder
+   the buckets or the rows, and there is deliberately no rule that could. */
+
+.sort-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.bucket {
+  margin-bottom: 26px;
+}
+
+.bucket-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.bucket-head h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bucket-head .why {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The one horizontal scroller on the screen. `min-width` on the table is what makes it
+   scroll rather than crush the record id column into three characters — the page body
+   itself never scrolls sideways. */
+.tbl-wrap {
+  overflow-x: auto;
+}
+
+/* `table-layout: fixed` with the widths declared once, because the three buckets are
+   three separate `<table>`s and auto layout sizes each one to its own content — which
+   reads as three unrelated lists rather than one ranking cut into three. The widths are
+   on the header cells and inherited by the column. */
+table.explorer {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+table.explorer thead th:nth-child(1) {
+  width: 16%;
+}
+
+table.explorer thead th:nth-child(2) {
+  width: 10%;
+}
+
+table.explorer thead th:nth-child(3) {
+  width: 13%;
+}
+
+/* The widest column by a distance, and deliberately: the atom is one unbroken token
+   carrying a verdict AND its sampling clause (INV-5), so the column has to hold the
+   longest one the product can compose rather than the shortest one it usually does. */
+table.explorer thead th:nth-child(4) {
+  width: 40%;
+}
+
+table.explorer thead th:nth-child(5) {
+  width: 21%;
+}
+
+table.explorer th {
+  text-align: left;
+  padding: 8px 14px;
+}
+
+table.explorer thead th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--line);
+}
+
+table.explorer td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
+}
+
+table.explorer tbody th {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-weight: 600;
+}
+
+table.explorer tr:last-child :is(td, th) {
+  border-bottom: 0;
+}
+
+table.explorer .tname {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+table.explorer :is(a) {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+table.explorer a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+table.explorer .r {
+  text-align: right;
+}
+
+table.explorer .num {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+table.explorer .rec a {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.door-link {
+  margin-top: 14px;
+}
+
+.door-link a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ============ F11 · THE REVIEW QUEUE ============
+
+   Workbench's own F11 arrangement (the epistemic band, then a stack of cards on the
+   warm English ground) with the Reviewer variant's queue time-budget line grafted in —
+   the graft three judges prescribed, because Workbench scored 6.5/10 on expert
+   usability and this is the screen a person who never sees the configuration pane
+   spends their five minutes on (design/README.md, SPEC 0.4).
+
+   There is no table-navigation rule in here and there never will be: a table name on
+   this screen is a `<code>` in a sentence. The absence is asserted in the browser
+   layer, not defended with a stylesheet. */
+
+.caveat {
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  border-left: 3px solid var(--warn);
+  background: var(--en-tint);
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.decision {
+  margin-bottom: 16px;
+}
+
+/* INV-1's indicator: Reviewer's row — position, time remaining, and now whether the
+   queue is longer than the promise covers — collapsed onto the ONE sentence the single
+   writer composes. There was a `<progress>` here drawing the same two numbers, fed by
+   two regexes that read them back out of that sentence; both are gone. The sentence is
+   what a reader is given, and a bar that needed a parser to exist added a failure mode
+   to a decoration. */
+.budget {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--ge-tint);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* WHERE ONE TABLE'S QUEUE ENDS AND THE NEXT BEGINS. The budget is a per-table promise
+   (INV-1), so the counter restarts here — and a restart with nothing marking it reads as
+   a bug. A rule and a gap, no heading and no name: a list of table names is the thing
+   F11 keeps off this screen. */
+.decision[data-table-start] {
+  margin-top: 32px;
+  border-top: 2px solid var(--line);
+}
+
+.decision .stmt {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* INV-4's sentence: the count, its denominator and its share. Sits under the statement
+   it is the magnitude OF, and never beside the atom — the atom carries the sampling
+   clause and this carries the size, and the two are different claims. */
+.magnitude {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fail);
+}
+
+.atom.failing {
+  color: var(--fail);
+  border-color: var(--fail);
+}
+
+@media (max-width: 760px) {
+  .spread {
+    grid-template-columns: 1fr;
+  }
+
+  .ge-pane {
+    border-left: 0;
+    border-top: 1px dashed var(--line);
+  }
+}
+
+/* ============ F13 · THE RUN RECORD ============
+   Workbench's Results screen, with one thing removed and one added. Removed: the
+   record-level verdict chip beside the id — the rows carry their own atoms, and a
+   second place a verdict is composed is a second place the sampling clause can go
+   missing (INV-5). Added: `.atom.pending`, which the mockup drew as a pulsing dot
+   labelled RUNNING. It is neither a dot nor a verdict here: a rule that has not
+   reported has no state to animate, and the text it carries comes from the single
+   writer. */
+
+.record .rec-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.rec-id {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rec-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ctx-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rec-head .spacer {
+  flex: 1;
+}
+
+.results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.result-row:last-child {
+  border-bottom: 0;
+}
+
+.rr-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rr-top .stmt {
+  font-family: var(--serif);
+  font-size: 15px;
+}
+
+/* A rule that has not reported yet. Neutral and dashed — deliberately NOT the pass
+   class, and deliberately not a colour of its own: silence is not a fourth verdict,
+   it is the absence of one. */
+.atom.pending {
+  color: var(--faint);
+  border-color: var(--line);
+  border-style: dashed;
+}
+
+/* INV-4's line, and the values behind it. The count and the share are the size of the
+   problem; the identified rows are the half a count cannot supply — an identifier is
+   what turns a number into a thing somebody can go and look at. */
+.viol {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.viol .vals {
+  color: var(--fail);
+}
+
+.viol.why {
+  color: var(--warn);
+  font-style: italic;
+}
+
+/* The framework's own output: present, and closed. `<details>` with no `open`
+   attribute, which is a fact a check can assert without looking at a screen. */
+details.raw summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+details.raw pre {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--ge-tint);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rec-note {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.record .refused {
+  margin: 12px 16px 0;
+}
+
+/* The never-run token sits in the same row a reading would, and a chip that stretched
+   to the width of the card would read as a banner rather than as the verdict slot. */
+.result-row > .atom {
+  align-self: flex-start;
+}
+
+/* ============ F12 · THE TRANSLATION DESK ============
+
+   Workbench's own F12 arrangement: the authoring field at the top, the list of things
+   waiting on a decision under it, and the catalog rail alongside — the menu is the
+   answer to "what can this thing even express?", which is the question every refusal
+   raises. Its Rev 0.4 amendment is not in this file at all and cannot be: the
+   configuration pane is absent from the DOMAIN EXPERT'S MARKUP because the payload
+   behind it never carried one (web/app/tables/[table]/rules/page.tsx). A stylesheet
+   hiding a pane that shipped is a weaker promise, and it is the one this replaced. */
+
+.f12-grid {
+  display: grid;
+  grid-template-columns: 1fr 236px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .f12-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nl-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+/* The one field on the screen set in the SERIF, because what is typed into it is a
+   sentence about the business rather than a value in a form. */
+.nl-input-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--en-tint);
+  font-family: var(--serif);
+  font-size: 14.5px;
+}
+
+.nl-input-row input::placeholder {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.rule-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px 0;
+}
+
+/* A REFUSAL IS NOT AN ERROR STATE. It is the product working — F4 declines to express a
+   rule rather than approximating it into the nearest one that compiles — so it is set on
+   the warm English ground with a fail-coloured rule down the side, and reads as an
+   answer rather than as something that went wrong. */
+.reject-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+  border-left: 3px solid var(--fail);
+  background: var(--en-tint);
+}
+
+.reject-inner .attempt {
+  font-family: var(--serif);
+  font-size: 14.5px;
+}
+
+.reject-inner .attempt::before {
+  content: "“";
+  color: var(--faint);
+}
+
+.reject-inner .attempt::after {
+  content: "”";
+  color: var(--faint);
+}
+
+.reject-inner .reason {
+  font-size: 13px;
+}
+
+.reject-inner .not-stored {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* THE COMPILE TOKEN IS NEUTRAL AND STAYS NEUTRAL. It is deliberately not `.atom.passed`
+   and deliberately not a colour of its own: Great Expectations accepted 10 of 25
+   deliberately nonsense rules while reporting success (LT-2a), so a rule that compiled
+   has cleared SHAPE and nothing else. The sentence beside it says so in words, because a
+   grey chip is a weaker statement than a sentence. */
+.atom.compiled {
+  color: var(--neutral-chip);
+  border-color: var(--line);
+}
+
+/* F4's refusal wears the same chip every other outcome does, in the fail colour
+   `.atom.rejected` uses, because it says the same thing to a reader: this did not become
+   a rule. `align-self` because the card is a column and a chip has no business being as
+   wide as the sentence under it. */
+.atom.refused-atom {
+  align-self: flex-start;
+  color: var(--fail);
+  border-color: var(--fail);
+}
+
+.compiled-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.unsaved-note {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---- the list of things waiting on a decision ---- */
+
+.bulk {
+  margin-top: 14px;
+}
+
+.bulk-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 8px;
+}
+
+.bulk-head .cap-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bulk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Two columns, and the first one is 24px whether or not it holds a checkbox. A held rule
+   renders no `input` at all (SPEC F12) — the column stays so the statements still line
+   up, which is what lets a reader scan the sentences rather than the controls. */
+.bulk-list li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.bulk-list li.excluded {
+  background: var(--ge-tint);
+}
+
+.bulk-list input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+
+.b-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.b-stmt {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+/* The evidence line inside a row is the same element as everywhere else and keeps its
+   marker; what changes is that it has no border above it, because the row already has
+   one and two rules in ten pixels reads as two rows. */
+.b-body .evidence {
+  padding: 0;
+  border-top: 0;
+}
+
+.excl-why {
+  font-size: 11px;
+  color: var(--warn);
+  font-style: italic;
+}
+
+.b-body .actions {
+  padding: 4px 0 0;
+  border-top: 0;
+}
+
+.bulk-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.bulk-foot .count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- the two edit doors ---- */
+
+.amend {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: var(--ge-tint);
+}
+
+.amend label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.amend :is(input, textarea) {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* The engineer's door is the configuration, so it is set in the mono face on the cool
+   ground; the expert's is a sentence, so it is set in the serif on the warm one. Same
+   control, two languages — which is the whole variant, at the size of one input. */
+.amend textarea {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  resize: vertical;
+}
+
+.amend input[type="text"] {
+  font-family: var(--serif);
+  font-size: 14px;
+  background: var(--en-tint);
+}
+
+.mutability-note {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mutability-note::before {
+  content: "§";
+  font-family: var(--serif);
+  color: var(--faint);
+}
+
+/* ---- the catalog rail ---- */
+
+.catalog {
+  position: sticky;
+  top: 16px;
+}
+
+.catalog-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px 4px;
+}
+
+.catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+.catalog-list li {
+  padding: 3px 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-list li::before {
+  content: "○ ";
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.catalog-list li.on {
+  color: var(--ink);
+}
+
+.catalog-list li.on::before {
+  content: "● ";
+  color: var(--accent);
+  font-size: 8px;
+}
+
+.catalog-foot {
+  padding: 6px 14px 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* The spread inside a list row: the same facing pages the permalink and the draft use,
+   with the card's own padding removed because the row already supplies it. */
+.b-body .spread {
+  border-top: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.b-body .pane {
+  padding: 10px 12px;
+}
+
+/* THE BULK CONTROL SITS AT THE END OF THE LIST IT ACTS ON, AND NOWHERE ELSE. A sticky
+   footer was tried and removed: `.card` clips (`overflow: hidden`, for the rounded
+   corners), which disables `position: sticky` outright, and un-clipping the card to pin a
+   button would be a layout change made for a control rather than for a reader. It does not
+   need pinning anyway — the cap (`app/rules/store.py::BULK_CAP`) exists precisely so the
+   selectable list is short enough that its evidence lines and its button are on one screen,
+   and the settled rules are a separate section below so they cannot push it off. That is
+   UX_HARNESS_FINDINGS §4's constraint met by the SIZE of the list rather than by CSS. */

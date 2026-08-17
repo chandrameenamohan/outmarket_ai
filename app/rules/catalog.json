@@ -21,7 +21,7 @@
     "type": "expect_column_values_to_be_unique",
     "family": "uniqueness",
     "base": "ColumnMapExpectation",
-    "english": "No two rows share a {column}",
+    "english": "No two rows share the same {column}",
     "required": ["column"],
     "optional": ["mostly"],
     "checks": []
@@ -120,7 +120,7 @@
     "type": "expect_table_row_count_to_be_between",
     "family": "row count",
     "base": "BatchExpectation",
-    "english": "The table holds between {min_value} and {max_value} rows",
+    "english": "Row count is between {min_value} and {max_value}",
     "required": [],
     "optional": ["min_value", "max_value"],
     "checks": ["at_least_one_bound", "ordered_bounds"]

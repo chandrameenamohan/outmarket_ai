@@ -4,35 +4,34 @@ Three layers, because disclosure can be lost at three different places:
 
   1. ORIGIN (data)   the executor has no framework-provided way to know a run was
                      capped — nothing in element_count, unexpected_count or meta
-                     distinguishes a capped run over a big table from an honest
-                     run over a small one. The counts are OURS, carried from the
-                     asset definition into the stored record, and the marker is
-                     DERIVED from them — so a record that lies about its coverage
-                     is not caught, it cannot be written down.
+                     distinguishes a capped run over a big table from an honest run
+                     over a small one. The counts are OURS, carried from the asset
+                     definition into the stored record, and the marker is DERIVED from
+                     them, so a record that lies about its coverage cannot be written.
   2. TRANSPORT (api) the marker survives normalisation and caching.
-  3. SURFACE (ui)    the verdict and the sampling disclosure are ONE text node.
+  3. SURFACE (ui)    the verdict and the sampling disclosure are ONE text node — and
+                     that layer drives a browser, so it lives in the browser layer:
+                     `tests/e2e/test_inv5_surface.py`, which this file's checks are the
+                     other two thirds of.
 
 Layer 3 is the mechanical form of the invariant and the reason there is a single
-status-atom formatter with a single writer. "Adjacent" survives nothing; a layout
-change, a responsive breakpoint or a truncation can separate two sibling elements.
-"Inside" survives all three. SPEC agrees as of Rev 0.2: INV-5, F13 and §7 step 7
-all say *inside* the status token. (They said *adjacent to* until the harness
-findings superseded it; this test is what enforces the difference.)
+status-atom formatter. "Adjacent" survives nothing — a layout change, a responsive
+breakpoint or a truncation can separate two sibling elements — and "inside" survives all
+three. SPEC agrees as of Rev 0.2: INV-5, F13 and §7 step 7 all say *inside* the status
+token, where they said *adjacent to* until the harness findings superseded it.
 
-WHAT LT-1b SETTLED HERE (SPEC O-2): no row cap ships. There is therefore no cap
-VALUE for a check to assert — asserting one would pin a thing that does not
-exist. The cap is the wrong lever three ways: it saves 37% (5.5 s of 14.84 s) for
-an 80% cut of the data; at full size it is a NET LOSS, because GE runs a query
-asset's SQL verbatim through a client-side cursor and pulls every LIMITed row to
-the client (22.67 s / 1,000,127 rows capped, against 13.63 s / 156 rows uncapped);
-and it BREAKS expect_column_values_to_be_of_type and
-expect_column_values_to_be_in_type_list outright (KeyError 'type' — a query asset
-has no reflected table to read a column type from). See
-tests/test_catalog_and_copy.py for the regression check that pins those two.
+WHAT LT-1b SETTLED HERE (SPEC O-2): no row cap ships, so there is no cap VALUE for a
+check to assert — asserting one would pin a thing that does not exist. The cap is the
+wrong lever three ways: it saves 37% (5.5 s of 14.84 s) for an 80% cut of the data; at
+full size it is a NET LOSS, because GE runs a query asset's SQL verbatim through a
+client-side cursor and pulls every LIMITed row to the client (22.67 s / 1,000,127 rows
+capped, against 13.63 s / 156 uncapped); and it BREAKS the two type expectations outright
+(KeyError 'type' — a query asset has no reflected table to read a column type from),
+pinned in tests/test_catalog_and_copy.py.
 
-What still ships is this file: the disclosure MECHANISM, built with the cap
-switched off at this scale, because the day a table is an order of magnitude
-larger the cap comes back and the disclosure has to already exist.
+What still ships is this file: the disclosure MECHANISM, built with the cap switched off
+at this scale, because the day a table is an order of magnitude larger the cap comes back
+and the disclosure has to already exist.
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ from typing import Any
 import pytest
 
 from app.dq import normalise, status
-from conftest import REPO, module_constant, pending, source_files
+from conftest import REPO, module_constant, source_files
 
 # The one writer. Same shape as INV-3's GE_RUNTIME constant: one place to change
 # if the module moves, and the gate follows.
@@ -63,12 +62,24 @@ SPEC: dict[str, Any] = {
     "kwargs": {"column": "order_total", "min_value": 0.0},
 }
 
-# Production code only, both languages. `web/app` is the Next route tree and holds
-# no node_modules. Tests are allowed to NAME these sentences in prose — this file
-# does, in its own docstring — the same exemption INV-3's text scan grants, for the
-# same reason: a check that bans its own explanation is unreadable.
+# Production code only, both languages. Tests are allowed to NAME these sentences in
+# prose — this file does, in its own docstring — the same exemption INV-3's text scan
+# grants, for the same reason: a check that bans its own explanation is unreadable.
+#
+# THE TYPESCRIPT ROOT IS `web`, NOT `web/app`. It was the route tree, on the argument
+# that the route tree holds no node_modules — which is an argument for excluding the
+# generated directories, not for a narrower root: a component moved to `web/components/`
+# or `web/lib/` would leave the scan silently, and the anti-vacuity guard below would
+# still pass on the route files left behind. So the whole of `web` is walked and the
+# three generated things are named.
+GENERATED = ("node_modules", ".next")
 TEXT_SCANNED = [p for p in source_files("app") if p.relative_to(REPO) != STATUS_MODULE]
-TEXT_SCANNED += sorted((REPO / "web/app").rglob("*.tsx")) + sorted((REPO / "web/app").rglob("*.ts"))
+TEXT_SCANNED += sorted(
+    p
+    for suffix in ("*.tsx", "*.ts")
+    for p in (REPO / "web").rglob(suffix)
+    if not set(p.parts) & set(GENERATED) and p.name != "next-env.d.ts"
+)
 
 # The composed shapes, which no constant can pin because they carry live numbers.
 # `sampled\s+[\d,]+\s*/` matches the rendered clause and NOT a `sampled` field on a
@@ -86,7 +97,23 @@ COMPOSED = (
     re.compile(r"\b(" + "|".join(v.upper() for v in status.VERDICTS) + r")\b"),
     re.compile(r"sampled\s+[\d,]+\s*/"),
     re.compile(r"violating rows.{0,40}rows scanned"),
+    # INV-1's budget line: the one a component would rebuild from numbers it already has.
+    re.compile(r"Decision\s+\d+\s+of\s+\d+"),
 )
+
+
+# The reserved copy, enumerated. DERIVING it from the writer's module-level strings was
+# tried and reverted: that also picks up `NEVER RUN` and `NO RULES`, which
+# `app/dq/coverage.py` and `app/rules/view.py` QUOTE IN PROSE while explaining the slot
+# they occupy. Which copy is load-bearing stays a judgement made in front of this list —
+# `STATE_LABELS` is deliberately NOT on it (see that constant). `BULK_ACTION_TEMPLATE` is
+# reserved for its wording; its `{n}` slot is the only part a component may move.
+OWNED = (
+    "REVIEW_CAVEAT COMPILED_TOKEN COMPILED_CAVEAT NOTHING_SAVED UNSETTLED_ATOM "
+    "ERRORED_DETAIL NEGLIGIBLE_SHARE BUDGET_LAST MULTI_COLUMN_LIMIT UNCLEAR_REQUEST "
+    "ACCEPT_ACTION REJECT_ACTION ASK_ACTION REASON_LABEL UNSAVED_NOTE RESTATE_LABEL "
+    "RECONFIGURE_LABEL AMENDED_NOTE BULK_EXCLUDED BULK_ACTION_TEMPLATE"
+).split()
 
 
 def _normalised(scan: normalise.Scan, element_count: int = 500_000) -> normalise.Result:
@@ -125,34 +152,22 @@ def test_status_atom_formatter_is_the_only_writer() -> None:
     is what SPEC F13 states verbatim, and F13's dashboard is exactly where somebody
     retypes it in TSX because reaching for the payload felt like more work.
 
-    Enforced as an import-boundary check in the style of INV-3: the reserved text
-    is read OUT of the module rather than duplicated into the test, so the check
-    tracks the copy instead of pinning a second copy of it.
+    Enforced in the style of INV-3's import boundary: the reserved text is read OUT of
+    the module rather than duplicated into the test, so the check tracks the copy instead
+    of pinning a second copy of it.
 
-    ponytail: a raw text scan. It catches the literal second copy, which is the
-    failure that actually happens — someone types the sentence into a component
-    because reaching for the payload felt like more work. It does not catch
-    `verdict.toUpperCase()` assembled from parts at runtime. The upgrade path, if
-    that ever appears, is the browser check that already exists here:
-    test_ui_renders_verdict_and_sampling_in_one_element compares the rendered DOM
-    text against status_atom() itself, which no amount of assembly can fake.
+    ponytail: a raw text scan. It catches the literal second copy, which is the failure
+    that actually happens; it does not catch `verdict.toUpperCase()` assembled at runtime,
+    and the upgrade path for that is the browser check already in this file.
     """
     assert (REPO / STATUS_MODULE).exists(), f"{STATUS_MODULE} is the designated writer and is gone"
     assert any(p.suffix == ".tsx" for p in TEXT_SCANNED) and len(TEXT_SCANNED) > 5, (
-        f"the scan collected {len(TEXT_SCANNED)} files. It covers app/ AND web/app's route "
-        "tree; if either side stops being collected this check goes green on a second copy."
+        f"the scan collected {len(TEXT_SCANNED)} files. It covers app/ AND all of web/; if "
+        "either side stops being collected this check goes green on a second copy."
     )
-    owned = [
-        status.REVIEW_CAVEAT,
-        status.COMPILED_TOKEN,
-        status.COMPILED_CAVEAT,
-        status.NOTHING_SAVED,
-        status.UNSETTLED_ATOM,
-        status.ERRORED_DETAIL,
-        status.NEGLIGIBLE_SHARE,
-        status.MULTI_COLUMN_LIMIT,
-        status.UNCLEAR_REQUEST,
-    ]
+    # By NAME, so a constant that is renamed or deleted fails here loudly rather than
+    # quietly stopping being guarded.
+    owned = [getattr(status, name) for name in OWNED]
     offenders = []
     for path in TEXT_SCANNED:
         text = path.read_text()
@@ -171,11 +186,10 @@ def test_status_atom_formatter_is_the_only_writer() -> None:
 def test_the_formatter_is_never_asked_to_render_a_running_verdict() -> None:
     """The verdict set is passed / failed / errored. There is no fourth value.
 
-    Execution is synchronous but progressive (SPEC O-3), so a rule has either
-    settled or not reported yet — and 'not reported yet' is the ABSENCE of a
-    verdict, not a kind of one. It renders UNSETTLED_ATOM. If `running` were a
-    verdict, every consumer downstream would have to special-case a state that
-    can never carry a violating count or a sampling disclosure.
+    Execution is synchronous but progressive (SPEC O-3), so a rule has either settled or
+    not reported yet — and 'not reported yet' is the ABSENCE of a verdict, rendered as
+    UNSETTLED_ATOM. If `running` were a verdict, every consumer downstream would have to
+    special-case a state that can never carry a count or a sampling disclosure.
     """
     assert set(status.VERDICTS) == {"passed", "failed", "errored"}
     for absent in ("running", "pending", "queued", ""):
@@ -248,15 +262,13 @@ def test_no_shipping_code_path_constructs_a_capped_asset() -> None:
 def test_sampling_marker_survives_normalisation_and_cache() -> None:
     """Transport layer. The rendered atom travels IN the payload; nobody recomposes it.
 
-    A cache is where a disclosure goes to get lost: the marker is derived, the
-    payload is JSON, and a reader that stores the verdict and reconstructs the
-    sentence has one code path where the sampling clause is optional. So the whole
-    atom is a field, it survives `json.dumps`/`json.loads` unchanged, and the counts
-    ride alongside it — a reader has the disclosure before it has anything to
-    recompose it from.
+    A cache is where a disclosure goes to get lost: the marker is derived, the payload is
+    JSON, and a reader that stores the verdict and reconstructs the sentence has one code
+    path where the sampling clause is optional. So the whole atom is a field, it survives
+    `json.dumps`/`json.loads` unchanged, and the counts ride alongside it.
 
-    ponytail: the cache exercised here is the serialisation, which is what a cache
-    stores. The run record that holds it is B15's, and it stores exactly this dict.
+    ponytail: the cache exercised here is the serialisation, which is what a cache stores.
+    The run record that holds it stores exactly this dict.
     """
     result = _normalised(normalise.Scan("orders", 500_000, 100_000))
     assert result.sampled
@@ -270,20 +282,6 @@ def test_sampling_marker_survives_normalisation_and_cache() -> None:
     )
     counts = (cached["sampled"], cached["scanned_rows"], cached["total_rows"])
     assert counts == (True, 100_000, 500_000), f"the counts behind the clause arrived as {counts}"
-
-
-@pytest.mark.e2e
-def test_ui_renders_verdict_and_sampling_in_one_element(app_url: str) -> None:
-    """Surface layer, deterministic and eye-free:
-
-    el = page.locator('[data-status-atom]')
-    text = el.text_content()
-    assert text == status_atom(...)            # from the shared formatter, not a literal
-    assert 'sampled' in text                   # inside the SAME element
-    for sib in el.locator('xpath=../*').all(): # no sibling carries it
-        assert sib is el or 'sampled' not in sib.text_content()
-    """
-    pending("needs a running app with a rendered run record — F13 surface, unbuilt")
 
 
 def test_the_sampling_marker_comes_from_the_asset_definition_not_from_ge_output() -> None:

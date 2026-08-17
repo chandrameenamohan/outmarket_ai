@@ -52,10 +52,17 @@ judges. A formatter in either one would be the second copy this module exists to
 prevent, so `english()` lives next to the templates and both call it.
 
 ponytail: one English template per type and three touches on top — the half-bound
-swap, a `mostly` clause, and `0.0 -> 0` / `['a','b'] -> a, b`. No grammar beyond
-that: "The table holds at least 1 rows" is the ceiling, and the upgrade path is a
-second template field per entry, which is fifteen more strings to keep true for a
-plural nobody has complained about.
+swap, a `mostly` clause, and `0.0 -> 0` / `['a','b'] -> a, b`. THERE IS NO GRAMMAR
+ENGINE AND THERE IS NOT GOING TO BE ONE: the two sentences that used to need one were
+fixed by rewriting them instead. "No two rows share a {column}" needed article
+selection on the column's first letter ("a order_reference"), and reads "the same
+{column}" now, which is correct for every column name there can ever be. "The table
+holds between {min} and {max} rows" produced "at least 1 rows" once half-bounded, and
+reads "Row count is at least 1" now, which pluralises nothing. A conditional article
+and a conditional plural would have been two code paths to keep true for fifteen
+templates; two better sentences cost nothing and cannot regress. Ceiling: the next
+template that needs agreement gets rewritten the same way, and if one ever genuinely
+cannot be, that is the day a second field per entry earns itself.
 """
 
 from __future__ import annotations

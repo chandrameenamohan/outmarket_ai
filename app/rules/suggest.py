@@ -49,6 +49,7 @@ reply has actually failed here.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -132,6 +133,16 @@ class Proposal:
         return str(named) if named is not None else None
 
 
+# How long a batch of proposals stays on the screen without being asked for again.
+# `app/dq/profile.py::CACHE_SECONDS`, deliberately the same number and for a stronger
+# version of the same reason: the evidence line under a proposal comes from the profile,
+# so a memo that outlived the profile would show a reviewer numbers the proposal was not
+# inferred from. Five minutes is also the budget INV-1 gives one table's review.
+MEMO_SECONDS = profile.CACHE_SECONDS
+
+_MEMO: dict[str, tuple[float, tuple[Proposal, ...]]] = {}
+
+
 async def for_table(table: str) -> tuple[Proposal, ...]:
     """Profile `table`, ask the model for rules, hand back proposals. Saves nothing.
 
@@ -139,10 +150,29 @@ async def for_table(table: str) -> tuple[Proposal, ...]:
     money: the profile is cached (F2), the model call is the one billed line, and
     everything that turns a reply into proposals is a pure function of a profile and a
     dict.
+
+    THE MEMO IS NOT STORAGE, and the distinction is the one this whole module rests on.
+    A proposal is still unsaved: it has no id, no row, no state anyone can act on, and
+    `tests/test_rule_suggestion.py::test_the_generator_can_neither_store_nor_execute`
+    still holds, because this dict is in a process and the store is a table. What it
+    buys is that F12's screen can be RELOADED. Without it, every reload of the rules
+    page is another $0.04 and another 6.6 s (LT-2b) for a list the reader was already
+    looking at — and a screen that charges for the back button is a screen people stop
+    pressing buttons on.
+
+    ponytail: a module-level dict with a timestamp, exactly like `profile.of`. No
+    eviction, no size bound, no lock. Ceiling: one entry per table for five minutes, in
+    a single-process demo server. The upgrade path is the same one that module names.
     """
+    memoised = _MEMO.get(table)
+    if memoised is not None and time.monotonic() - memoised[0] < MEMO_SECONDS:
+        return memoised[1]
+
     profiled = profile.of(table)
     reply = await model.ask_json(_prompt(profiled), SYSTEM)
-    return proposals(profiled, reply.data)
+    made = proposals(profiled, reply.data)
+    _MEMO[table] = (time.monotonic(), made)
+    return made
 
 
 def proposals(profiled: profile.TableProfile, reply: Mapping[str, Any]) -> tuple[Proposal, ...]:
