@@ -63,10 +63,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from typing import Any
 
 from app.api import request
+from app.api.dualstack import DualStackServer
 from app.dq import coverage, normalise, profile, run, runs
 from app.rules import desk, store, view
 from app.rules import schema as live
@@ -377,7 +378,7 @@ def serve(port: int | None = None) -> None:
 
     ge_runtime.connect()
     address = ("", port if port is not None else int(os.environ.get(PORT_VAR, DEFAULT_PORT)))
-    with ThreadingHTTPServer(address, Handler) as httpd:
+    with DualStackServer(address, Handler) as httpd:
         httpd.serve_forever()
 
 

@@ -91,6 +91,14 @@ create role dq_system login password %(system_password)s;
 -- holds no privilege on any table in `public`, which is the guarantee that matters.
 grant create on database postgres to dq_system;
 
+-- That grant is what makes the SECOND scratch schema free (bead dq-cyi.4): the GE layer
+-- writes `dq_check_ge` and the browser layer keeps `dq_check`, so the two can run at the
+-- same time without moving each other's rule counts. `dq_check_ge` is deliberately NOT
+-- created below — dq_system creates it on first connect and therefore OWNS it, which is
+-- exactly the property section 3 has to hand-fix for the schemas that predate this file.
+-- `make reset-scratch` drops both of them on the SYSTEM DSN for the same reason: an owner
+-- does not need the owner's credentials to drop what it made.
+
 -- Deliberately absent: any grant to dq_system on `public`. It is not a read-only
 -- role there, it is a no-access role there.
 

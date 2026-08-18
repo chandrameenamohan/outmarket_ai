@@ -40,3 +40,4 @@ tests/e2e/__baselines__/*.diff.png
 
 # beads: passive export of the Dolt DB — stale the moment the DB moves
 .beads/issues.jsonl
+.gstack/

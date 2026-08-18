@@ -13,6 +13,17 @@ import { HOME, chosenRole, selectRole } from "./role";
  * The two doors are `<form>`s rather than links because choosing writes something
  * (the cookie). A link that changed state on GET would be re-chosen by every
  * prefetch, every crawler and every back button.
+ *
+ * THE CHOICE IS OFFERED ONCE ON THIS SCREEN. The header's role switch is on every
+ * other route and not on this one; `globals.css` under `body:has(.doorway)` is where
+ * that is implemented and where the reasoning lives, including the two server-side
+ * arrangements that were tried first and what each cost.
+ *
+ * `.doorway` is the composition: three bands — the question, the two doors, and the
+ * line that says what choosing does and does not mean — sized to the fold and
+ * centred in it, rather than a stack that stops a third of the way down a screen it
+ * was given all of. Not one word of the copy moved except that last line, which now
+ * sits under the choice it reassures the reader about instead of above it.
  */
 export default async function Page() {
   const role = await chosenRole();
@@ -20,13 +31,9 @@ export default async function Page() {
     redirect(HOME[role]);
   }
   return (
-    <>
+    <section className="doorway">
       <div className="screen-head">
         <h1>Who is looking?</h1>
-        <p className="who">
-          This is a view, not an account. There is nothing to log into, the two views share
-          every address, and you can change your mind from any screen.
-        </p>
       </div>
       <div className="door">
         <form action={selectRole}>
@@ -50,6 +57,10 @@ export default async function Page() {
           </button>
         </form>
       </div>
-    </>
+      <p className="who">
+        This is a view, not an account. There is nothing to log into, the two views share every
+        address, and you can change your mind from any screen.
+      </p>
+    </section>
   );
 }

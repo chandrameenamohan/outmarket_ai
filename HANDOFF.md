@@ -2,14 +2,26 @@
 
 **Read this first.** It exists so a fresh session can resume without re-deriving anything.
 
-Last updated: 2026-08-17 · after the third build wave. **The product is built.** All fifteen SPEC
-features have shipped, five of the six epics are closed, and both halves of the gate run against
-real processes: `make check` is **187 passed, 0 skipped**, and `make check-ui` drives a real
-Chromium over a real Next process in front of a real Python process against the real seeded
-Supabase database — **52 passed, 9 skipped**.
+Last updated: 2026-08-18 · **at close-out.** Every bead an agent can finish is finished. **The
+product is built:** all fifteen SPEC features have shipped, **41 of 46 beads are closed**, six of the
+seven epics are closed, and both halves of the gate run against real processes — `make check` is
+**187 passed, 0 skipped**, `make check-ui` drives a real Chromium over a real Next process in front
+of a real Python process against the real seeded Supabase database, and `make check-ge` runs 33
+checks against the real database. Fourteen PRs are merged.
 
-What is *not* done is short and is named in §9: no deployed URL, no approved visual baselines, and
-**the AI-usage write-up, which is a quarter of the grade and is still unwritten.**
+**EVERYTHING THAT IS LEFT NEEDS THE AUTHOR. There is no next agent task.** Five beads are open and
+they reduce to two human acts:
+
+1. **Look at six PNGs and `git add` them.** `dq-vix`, `dq-dkq` and `dq-zyt` are all held by the same
+   last criterion, and it is the one no machine may satisfy. The engineering under them is done and
+   proven: the six visual states now photograph a fixed demo store and came out **byte-identical
+   across two independent runs** (md5s in `dq-vix`'s notes, taken 2026-08-18), so **zero** states
+   pend for data dependence. What they pend for is approval. §9 lists the six files.
+2. **Stand up a deployed URL.** `dq-cyi.1`, and its parent epic `dq-cyi` stays open behind it rather
+   than closing around it. It needs hosting with a bill and an account attached. §9 has the detail.
+
+**The AI-usage write-up — a quarter of the grade — is written and its bead is closed:
+[`AI_USAGE.md`](./AI_USAGE.md) (`dq-803`).**
 
 ---
 
@@ -42,36 +54,50 @@ gate it depends on is kept; the loop driver is replaced by attended, one-task-at
 | 4 & 6 | Verification gate | ✅ **built, green, and shown to block** — now with a real browser layer over a real app → `VERIFICATION.md` |
 | 5 | Build (attended) | ✅ **three waves, all fifteen features.** Wave 1: the boundaries and the rule domain (E1 partial, E2). Wave 2: the privilege split, discovery, proposals, authoring, execution, results (E3, E4). Wave 3: the two front doors, the delivery stack and SPEC §7 end to end (E5, E6 partial) |
 | 7.5 | Craft review | ✅ done inside wave 3 — it is why `VERIFICATION.md` says "after the craft pass" and why the eighth visual state was deleted rather than approved |
-| 9 | Provenance | ⬜ **the AI-usage write-up is still unwritten.** See §9. It has been the top of this list since the first session and it is still the top |
+| 9 | Provenance | ✅ **`AI_USAGE.md`** — the fourth deliverable, written 2026-08-17 from the fourteen PR bodies, the four learning tests, the bead close reasons and `bd memories`. Bead `dq-803`. See §9 |
 
-**Epics:** E1 `dq-5pb`, E2 `dq-yov`, E3 `dq-3bp`, E4 `dq-klv`, E5 `dq-rbf` are **CLOSED**, each with
-its children's evidence in the close reason. **E6 `dq-cyi` is open** on two children — see §4.
+**Epics:** E1 `dq-5pb`, E2 `dq-yov`, E3 `dq-3bp`, E4 `dq-klv`, E5 `dq-rbf` and the UX epic
+`dq-j15` are **CLOSED** — six of the seven `bd` holds — each with
+its children's evidence in the close reason. **E6 `dq-cyi` is open on ONE child**, `dq-cyi.1`, the
+deployed URL — see §4. Its other three children, including `dq-cyi.4`, are closed.
 
 ### The gate, today
 
 ```
-make check       187 passed, 0 skipped, 97 deselected, 2.73 s, exit 0
-                 ruff → ruff format → mypy (63 source files) → pytest → eslint + tsc
-make check-ui     52 passed, 9 skipped, 223 deselected, 368.55 s, exit 0
-                 real Chromium, two real processes, real Supabase, 3 real billed model calls
-make check-ge     33 passed, 251 deselected, 104.14 s, exit 0   (network + database)
+# 2026-08-18 08:50:29 IST — all three launched from one shell, at once, on one machine
+make check       187 passed, 0 skipped, 96 deselected, 2.88 s, exit 0
+                 ruff → ruff format → mypy (66 source files) → pytest → eslint + tsc
+make check-ge     33 passed, 250 deselected, 103.64 s, exit 0   (network + database)
+make check-ui     52 passed, 8 skipped, 223 deselected, 368.17 s, exit 0
+                 real Chromium, two real processes, real Supabase, 6 real billed model calls
 ```
 
-**Run `check-ge` and `check-ui` ONE AT A TIME.** They share `DQ_SCHEMA=dq_check`, both write to it,
-and the store is append-only — so run together they take each other red with nothing wrong with
-either. It happened at close-out; `VERIFICATION.md` §4.7.2 has the numbers and bead `dq-cyi.4` owns
-the fix. `make check-ui` also needs its two processes already running — the command lines are in
-`VERIFICATION.md` §1.
+All three were measured **running at the same time** (bead `dq-cyi.4`), which is now a supported
+thing to do and used to take both of the heavy ones red.
+
+**`check-ge` and `check-ui` may be run AT THE SAME TIME** (bead `dq-cyi.4`). They used to share
+`DQ_SCHEMA=dq_check` and take each other red with nothing wrong with either; they now have a scratch
+schema each — `dq_check_ge` and `dq_check` — derived from the markers pytest selected, so it is not a
+value a shell or a `.env` can get wrong, and a process that collected both layers is refused before it
+writes a row. Neither ever writes to the demo store `dq`. `VERIFICATION.md` §4.7.2 has both failures,
+both guards and the green concurrent run. `make reset-scratch [ARGS=dq_check_ge]` drops them.
+`make check-ui` also needs its two processes already running — the command lines are in
+`VERIFICATION.md` §1, and the API one must carry `DQ_SCHEMA=dq_check` or the layer fails by name.
 
 **Zero skips in `make check`.** That number used to be 28 and every one of them was a `PENDING —`
-line naming what it waited for; they are all assertions now. The **nine** remaining skips are all in
-the browser layer and all of them are honest: seven visual-regression states and two delivery
+line naming what it waited for; they are all assertions now. The **eight** remaining skips are all in
+the browser layer and all of them are honest: six visual-regression states and two delivery
 targets. §9 says what a human has to do about them.
 
-**Working tree.** Waves 1 and 2 are committed on branch `build/wave2-engine` (Wave 1 is merged to
-`origin/main` as PR #12). **Wave 3 — the whole UI, the docker stack, SPEC §7's flow — is
-uncommitted**, 61 paths in `git status`. Branching, committing and the PR are the author's, not an
-agent's (§4a).
+**Working tree, at close-out 2026-08-18.** All three build waves are **merged to `origin/main`** —
+PR #12 (wave 1), #13 (wave 2), #14 (wave 3) — and `main` is up to date with its remote. What is
+still uncommitted is the craft-pass and close-out work that landed after wave 3: `AI_USAGE.md`,
+`seed/seed_demo_rules.py`, `tests/fixtures_demo.py`, `tests/scratch.py`, the five new baseline PNGs
+and the re-shot `role-door.png`, plus edits to `HANDOFF.md`, `README.md`, `VERIFICATION.md`,
+`Makefile`, `pyproject.toml`, `.gitignore`, `app/db/roles.sql`, `tests/conftest.py`, three test
+files and three `web/app/` files. **Branching, committing and the PR are the author's, not an
+agent's** (§4a) — and for the six PNGs among them, `git add` is not merely process, it *is* the
+approval the visual layer waits for (§9).
 
 ---
 
@@ -84,9 +110,11 @@ agent's (§4a).
 | **Verification harness** | `VERIFICATION.md` (the design) + `Makefile` + `tests/` + `init.sh` |
 | **How to run it** | `README.md` — docker compose, credentials, and "The IPv6 trap" |
 | Learning-test findings | `learning-tests/FINDINGS.md`, raw numbers in `lt1b_results.json` |
+| **AI-usage deliverable (the fourth graded axis)** | `AI_USAGE.md` — what was delegated, what was refused, what the gate caught, what it misses. This is what the design doc's Appendix D pointed at |
 | Demo dataset | `seed/MANIFEST.md`, `seed/seed_demo_data.py` — loaded in Supabase |
+| **Demo RULE fixture** (bead `dq-vix`) | `seed/seed_demo_rules.py`, run by `make demo-fixture` — eight rules and two run records in the demo store `dq`. It is what the six visual baselines photograph, and **a reviewer needs it or the product looks broken while working perfectly** (`README.md`, "Run it") |
 | UX variants + judge scores | `design/README.md`, four self-contained HTML files; **the chosen one is `design/ux-variant-workbench.html`** |
-| **Architecture design doc** | https://claude.ai/code/artifact/97a3df0c-7ae3-4e8a-94fe-6e23e8b6f0f9 — problem framing, designs not chosen, risk register, Appendix D (AI-usage log, still *Pending*) |
+| **Architecture design doc** | https://claude.ai/code/artifact/97a3df0c-7ae3-4e8a-94fe-6e23e8b6f0f9 — problem framing, designs not chosen, risk register, Appendix D (AI-usage log — **should now point at `AI_USAGE.md`**; the artefact is hosted, so only the author can edit it) |
 | Task tracker | beads, prefix `dq` — `bd ready`, `bd list`, `bd show <id>` |
 | Credentials | `.env` (gitignored); shape documented in `.env.example` |
 | The author's workflow | `software_development_workflow.md`, `HOW_I_BUILD.md` |
@@ -122,8 +150,13 @@ agent's (§4a).
 bd ready
 ```
 
-Three beads are open, and they are the whole remaining ledger:
+**Five beads are open, they are the whole remaining ledger, and every one of them is the author's.**
+There is no agent-shaped work left in it: four are held by a human's eye on a PNG and the fifth by a
+hosting account. Nothing below was closed around, and nothing was `--force`d.
 
+- **`dq-cyi` · E6 — the delivery epic.** Open only because `dq-cyi.1` is. Three of its four children
+  are closed, `dq-cyi.4` among them. It closes when a deployment answers the smoke check that
+  already pends by name on every run.
 - **`dq-cyi.1` · B22 — a reviewer runs the product without our machine.** One criterion of three
   is unmet: **no deployed URL exists.** The docker half is proven and recorded with its numbers in
   `VERIFICATION.md` §8.1 (both images build clean in 1 m 52 s, the compose stack answers the same 21
@@ -132,13 +165,25 @@ Three beads are open, and they are the whole remaining ledger:
   real cost of the topology, because `web/app/api.ts` reaches Python **server-side**, which is what
   buys this product no CORS and no API base URL in the browser bundle. Read `README.md`,
   "The IPv6 trap", before blaming the stack.
-- **`dq-cyi.4` · B27 — `make check-ge` and `make check-ui` share one scratch schema.** Also found at
-  close-out, by running them together: both went red, neither was broken. Run them one at a time
-  until this lands.
-- **`dq-vix` · B25 — a fixed demo fixture makes the six data-dependent screens photographable.**
-  This is the bead that unblocks six of the seven visual baselines. `VERIFICATION.md` §4.3 had
-  promised they would clear "with B23's fixed demo data"; B23 builds and **drops its own schema** by
-  design, so that promise had no owner until this bead.
+- **`dq-vix` · B25 — a fixed demo fixture makes the data-dependent screens photographable.**
+  **The engineering is done and proven.** `seed/seed_demo_rules.py`, `make demo-fixture` and
+  `tests/fixtures_demo.py` are in the tree; `VERIFICATION.md` §4.3 had promised the states would
+  clear "with B23's fixed demo data", and B23 builds and **drops its own schema** by design, so that
+  promise had no owner until this bead. **Zero** states pend for data dependence now — `DATA_DEPENDENT`
+  is gone from `tests/e2e/test_ui_hygiene.py`, and two independent runs on 2026-08-18 (43.53 s, then
+  42.65 s) produced **byte-identical PNGs for all six states**, md5s recorded in the bead's notes.
+  What they pend for is the one thing a machine cannot supply: a person staging the PNG.
+- **`dq-dkq` · B28 — the role door earns its screen.** **Four criteria of five met**, re-measured
+  against the running app on 2026-08-18: document height at 1280×720 is exactly **720** (nothing
+  trails below the fold, nothing is cut off), the door offers the role choice **once** (two cards;
+  the header switch is 1 node in the HTML with 0 visible, out of the a11y tree and the tab order),
+  `/tables` keeps its toggle, and the behaviour layer is 6/6 green including
+  `test_role_is_never_a_route_segment`. The fifth criterion is the re-shot `role-door` baseline.
+- **`dq-zyt` — a re-shot baseline self-approved, and two graded documents said it could not.**
+  **The check is fixed** (`_approved()` asks `git diff --quiet` as well as `git ls-files`), and the
+  correction is written up in `VERIFICATION.md` §4.3 and `AI_USAGE.md` §6.2 rather than quietly
+  patched. The bead is still OPEN on its last criterion: a human's eye on the re-shot `role-door`
+  baseline.
 
 **Read `bd show <id>` before starting anything** — each bead carries its own acceptance, its check
 order (cheapest deterministic first), and an explicit out-of-scope list.
@@ -220,7 +265,8 @@ touching F8, F9 or F13. Summary:
   live table, not reasoned about.
 - **A screenshot of a screen this layer writes to is a photograph of a database.** The review-queue
   baseline came out 1280×12430 and 1.3 MB, thirty-eight cards, most of them the same rule duplicated
-  by earlier runs into an append-only store. That is what put six states in `DATA_DEPENDENT`.
+  by earlier runs into an append-only store. That is what put five states in `DATA_DEPENDENT` —
+  a list that no longer exists, because bead `dq-vix` removed the cause instead of the symptom.
 - **Two visual states can be the same photograph.** `tables-bucket-two-errored` and
   `tables-three-buckets` produced byte-identical PNGs (same md5, two independent runs). The eighth
   state was deleted rather than approved.
@@ -229,10 +275,12 @@ touching F8, F9 or F13. Summary:
   write. This cost one red `make check-ui` (bead `dq-cyi.3`) after the repository had already learned
   it twice elsewhere.
 - **Two check layers sharing one append-only schema take each other red.** `make check-ge` and
-  `make check-ui` both pin `DQ_SCHEMA=dq_check` and both write to it, so a check counting rules
-  before and after an action reads a number the other layer is moving. Both went red when run
-  together and both are green alone (bead `dq-cyi.4`). The lesson is not "make the count tolerant" —
-  that assertion is the one that catches a stored non-rule — it is "one writer per schema".
+  `make check-ui` both pinned `DQ_SCHEMA=dq_check` and both write to it, so a check counting rules
+  before and after an action read a number the other layer was moving. Both went red when run
+  together and both were green alone. The lesson is not "make the count tolerant" — that assertion
+  is the one that catches a stored non-rule — it is "one writer per schema", and that is what bead
+  `dq-cyi.4` shipped: a schema per layer, derived from the markers rather than exported, plus a
+  refusal for a process that collected both. The two run together green now (VERIFICATION §4.7.2).
 
 ---
 
@@ -285,26 +333,64 @@ Nothing in the spec is open. What is left is delivery and provenance, and both a
 
 ## 9. The thing most likely to be forgotten
 
-**It is still the same thing, and it is now the only large one left: the AI-usage deliverable is a
-quarter of the grade and nobody has written it.** The brief grades "how AI tools were leveraged
-during development" on equal footing with the code. The evidence exists and is unusually good —
-twelve PRs whose bodies carry the findings, four learning tests that each *falsified* something a
-reasonable person would have assumed, a gate that says `PENDING —` out loud and was shown to go red
-five separate times, bead close reasons that walk a DoD criterion by criterion with pasted output,
-`HOW_I_BUILD.md`, and a design doc whose Appendix D is still marked *Pending*. **None of it has been
-assembled into the artefact a reviewer reads.** It cannot be reconstructed convincingly after the
-fact, and the build phase that generated the most material is now over. This is the single highest
--value hour left in the project.
+**DONE, 2026-08-17 — this entry is kept as a record rather than deleted.** The AI-usage deliverable
+is a quarter of the grade and it is now written: **[`AI_USAGE.md`](./AI_USAGE.md)**, bead `dq-803`.
+It was assembled from the fourteen merged PR bodies, `learning-tests/FINDINGS.md`, the bead close
+reasons, `bd memories` and `VERIFICATION.md` §4.7/§8/§10 — every claim in it traceable to one of
+those, with a verification appendix naming the command for each section. It covers the tier choice
+and the deliberately omitted loop, the four falsifications, the **thirteen** documented occasions the gate
+was shown to block, the honest failures (the refused privilege grant, the forgeable feature ledger
+that was deleted, the stale export, the IPv6 outage, the two red-with-nothing-broken runs), and the
+three places a human stayed load-bearing. **The design doc's Appendix D should now point at it.**
 
-Two runners-up, both of which need a **human**, not a session:
+What made it writable at all was not documentation discipline at the end — it was §4a's rule that
+every finding goes in the **PR body**, not only in the bead notes. Without that it would have been
+reconstruction, and it would have shown.
 
-1. **Seven visual baselines, and only one of them has a picture.** `tests/e2e/__baselines__/role-door.png`
-   is written and **unapproved** — it is untracked, and *being tracked by git is what approval means
-   here*, because a person staging a file is the only signal available that a person looked at it.
-   **Open it and decide whether that is the screen you meant.** The other six pend on `dq-vix` (B25)
-   for a fixed demo fixture, because today they would photograph a database rather than a screen. No
-   agent may approve any of them; a machine approving its own photograph is the one habit that check
-   exists to prevent.
+Two runners-up remain, both of which need a **human**, not a session:
+
+1. **Six visual baselines, all six written, none of them approved.** They are photographs of the
+   fixed demo store now (bead `dq-vix`), so nothing pends for data dependence any more and what is
+   left is the one thing a machine cannot supply: a person opening each PNG, deciding it is the
+   screen they meant, and `git add`-ing it.
+
+   **These are the six files, and their md5s from two independent runs on 2026-08-18 — identical
+   both times, which is the proof that what you are looking at is a function of the code and not of
+   the database:**
+
+   | File under `tests/e2e/__baselines__/` | Route it photographs | md5, twice |
+   |---|---|---|
+   | `role-door.png` | `/` | `1bb3f3224d34c4fd435b2f07f28e8b36` |
+   | `tables-three-buckets.png` | `/tables` | `2e61ff139e2ed21d5ed7899f776b41f3` |
+   | `rules-facing-panes.png` | `/tables/orders/rules` | `ed9a0d4cef028e8996b5aedf8cc9ffcf` |
+   | `review-queue-with-caveat.png` | `/review` | `5dfe20c568f0f5c2925775a1d6a0d006` |
+   | `rule-permalink-standalone.png` | `/rules/<demo rule id>` | `052229a407febd0638c9b9a065a01911` |
+   | `run-record-in-flight.png` | `/runs/<demo record id>` | `9dc17883eb0d0ce9c12ac937e11a85cc` |
+
+   `role-door.png` is the one to look at hardest: it is TRACKED and MODIFIED, so you are choosing
+   between the committed door and the re-shot one (`git show HEAD:tests/e2e/__baselines__/role-door.png`
+   gets you the old picture). The other five are untracked and this is their first look.
+
+   Approving is `git add` on the files you accept. Then re-run the layer — those states stop
+   pending and start comparing, and `dq-vix`, `dq-dkq` and `dq-zyt` close on that output:
+
+   ```bash
+   # the two processes from VERIFICATION.md §1 must be up
+   APP_URL=http://localhost:3000 DQ_API_URL=http://localhost:8000 \
+     python3 -m pytest -m e2e -k visual_regression -ra
+   ```
+
+   **Read `VERIFICATION.md` §4.3 before you do it**, because the mechanism had a hole and this is the
+   bead that found it. `tests/e2e/__baselines__/role-door.png` is TRACKED — the path was added inside
+   `23ee9e1`, whose own message declares it deliberately untracked, so the staging reads like
+   `git add -A` rather than a decision. It is also MODIFIED: the working tree holds the re-shot door
+   from `dq-dkq`, which differs from the committed picture by **31.36% of its pixels against a 0.20%
+   budget**. Until bead `dq-zyt` was fixed, `_approved()` asked only whether the PATH was tracked, so
+   that state compared against a picture nobody had staged and passed. It now asks
+   `git diff --quiet` too, and `role-door` pends with the other five. **The harness has compared two
+   screenshots exactly once, and that comparison should not have been allowed to count.** No agent
+   may approve any of these; a machine approving its own photograph is the one habit that check
+   exists to prevent, and it got through once by a door nobody had checked.
 2. **There is no deployed URL** (`dq-cyi.1`). The docker path is proven and the smoke check for a
    deployment already exists and pends by name — it fails rather than skips the moment
    `DEPLOYED_APP_URL` points at something silent. Until someone stands one up, SPEC §3's promise is

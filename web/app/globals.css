@@ -49,6 +49,9 @@
   --pass: #2c7a4b;
   --neutral-chip: #5c6773;
   --shadow: 0 1px 3px rgba(20, 30, 40, 0.08);
+  /* The top bar's height, named because the role door subtracts it from the viewport
+     to compose to the fold. One number, one place, so the two cannot drift apart. */
+  --topbar: 54px;
   --serif: "Charter", "Iowan Old Style", "Palatino", Georgia, serif;
   --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
@@ -105,7 +108,7 @@ pre {
   color: var(--faint);
 }
 
-/* ============ TOP BAR — the role switch lives here, on every route ============ */
+/* ====== TOP BAR — the role switch lives here, on every route but the door ====== */
 
 .topbar {
   display: flex;
@@ -113,7 +116,7 @@ pre {
   gap: 20px;
   flex-wrap: wrap;
   padding: 0 20px;
-  min-height: 54px;
+  min-height: var(--topbar);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -212,22 +215,92 @@ p {
 
 /* ============ THE ROLE DOOR ============ */
 
+/* The door is the one screen with no content of its own to run down the page, so it
+   is composed TO THE FOLD instead of trailing off the top of one: three bands — the
+   question, the two doors, the line about what a view is — as a column the height of
+   the viewport below the bar, centred in it. `min-height` and not `height` so a short
+   window or a wrapped top bar scrolls rather than clipping the second card.
+
+   AND IT IS THE ONE SCREEN WITH NO ROLE SWITCH IN ITS HEADER. The two cards below ask
+   that question in full, with the sentence that says where each view starts; the
+   segmented control three inches above them is the same decision a second time, and a
+   screen that asks twice reads as though the two asks might differ. Every other route
+   keeps it — which is what this screen's own copy promises.
+
+   ponytail: `:has()` on the shell, rather than the two server-side arrangements that
+   would keep the markup out of the document altogether. web/app/layout.tsx records why
+   both were rejected: the layout renders ONCE and is preserved across navigations, so
+   a parallel-route slot left `/tables` with no switch after a reader walked through the
+   door (six hygiene checks went red), and the client-component alternative makes every
+   route's shell a client component. CSS is evaluated against the DOM as it is now, so
+   it is the one mechanism here that cannot go stale. Ceiling, stated plainly: the form
+   IS in the door's HTML. `display: none` takes it out of the accessibility tree, out of
+   the tab order and out of the picture, so no user of any modality is offered the choice
+   twice — but view-source, and a reader with styles off, still find it. Take it out
+   properly the day this screen earns its own root layout, and not before.
+   `:has()` is Chromium 105 / Safari 15.4 / Firefox 121; a browser without it gets the
+   old top-heavy stack and a duplicate control, which is the previous screen and not a
+   broken one. */
+main:has(> .doorway) {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+body:has(.doorway) .role-switch {
+  display: none;
+}
+
+.doorway {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+  min-height: calc(100vh - var(--topbar));
+  /* Uneven on purpose: centred on the arithmetic reads low, so the block sits about
+     twenty pixels above the true middle, which is where the eye puts it. */
+  padding: 32px 0 68px;
+}
+
+.doorway .screen-head {
+  margin-bottom: 0;
+}
+
+/* The question is the screen's title here, not a page heading above a table. */
+.doorway .screen-head h1 {
+  font-size: 32px;
+}
+
+/* Below the choice rather than above it: it answers "what did I just commit to?",
+   which is not a question anybody has yet when they arrive. Same sentence. */
+.doorway .who {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
 .door {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-  margin-top: 20px;
+  gap: 20px;
 }
 
 .door form {
   display: flex;
 }
 
+/* Tall enough to read as a door rather than as a list item — the two of them are the
+   only thing on the screen a person is meant to press — and a flex COLUMN, because a
+   button centres its content vertically by default and the two cards hold different
+   amounts of text: left as a block, their titles sat on different lines. */
 .door button {
   flex: 1;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   text-align: left;
-  padding: 20px;
+  padding: 30px;
+  min-height: 176px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
@@ -243,14 +316,15 @@ p {
 .door .title {
   display: block;
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
 }
 
 .door .why {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--muted);
 }
 

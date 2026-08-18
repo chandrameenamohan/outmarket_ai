@@ -10,9 +10,16 @@ Three of the four went REAL with B1: the shell renders on every route, so
 console-clean, CLS and axe all have something true to say about it and say it.
 The fourth, visual regression, went real with F14 (bead dq-rbf.1) — the first bead
 that renders a screen rather than a placeholder. Every route now renders a real screen,
-so nothing pends for being unbuilt any more; six of the seven states pend because what
-they render is not a function of the code alone, and each says which way by name. What
-this check NEVER does is approve its own screenshot; see that test.
+so nothing pends for being unbuilt any more.
+
+**THE THREE HYGIENE CHECKS AND THE PHOTOGRAPHS NOW RUN ON DIFFERENT STACKS, AND THAT IS
+THE POINT OF BEAD dq-vix.** Console errors, layout shift and axe violations are properties
+of the CODE, so they belong on the shared stack the rest of this layer drives, whatever is
+in its store. A photograph is not: five of the six states used to pend because what they
+rendered was a function of an append-only store THIS LAYER WRITES TO, so the picture was
+of a database. They now open the demo store instead — a fixed fixture, in a schema nothing
+here writes to (`tests/fixtures_demo.py`, `seed/seed_demo_rules.py`). What this check
+NEVER does is approve its own screenshot; see that test.
 """
 
 from __future__ import annotations
@@ -173,19 +180,32 @@ def test_accessibility_has_no_violations(
     )
 
 
-# state -> the route it lives on. SEVEN named states, not every screen at every
+# state -> the route it lives on. SIX named states, not every screen at every
 # breakpoint, because each baseline is a maintenance cost and has to earn itself.
 #
-# It was eight until this bead. `tables-bucket-two-errored` mapped to `/tables`, exactly
-# as `tables-three-buckets` does, and `_settled()` only navigates — so the two states
-# were the same full-page photograph by construction, and the two written PNGs were
-# byte-identical (md5 251d2012bccdbdc52ebb0341b5fbbd54, twice, on two independent runs).
-# A baseline that cannot fail while its neighbour passes asserts nothing its neighbour
-# does not, and approving both would have put a human signature on a duplicate. Scoping
-# the second shot to the bucket element was the alternative and was not taken: it would
-# still be a strict subset of the first image, i.e. the same maintenance cost for the
-# same information. The middle bucket is checked where it is actually derived —
-# `tests/test_table_coverage.py` for the derivation, INV-5's browser check for its atom.
+# TWO STATES HAVE BEEN DELETED RATHER THAN APPROVED, FOR THE SAME REASON, AND THE SECOND
+# ONE IS WHY THE FIRST ONE'S ARGUMENT IS WRITTEN DOWN. `_settled()` only navigates, so two
+# states on one route are one photograph by construction:
+#
+#   `tables-bucket-two-errored` shared `/tables` with `tables-three-buckets`, and the two
+#   written PNGs were byte-identical (md5 251d2012bccdbdc52ebb0341b5fbbd54, twice, on two
+#   independent runs). Scoping the second shot to the bucket element was the alternative
+#   and was not taken: it would still be a strict subset of the first image, i.e. the same
+#   maintenance cost for the same information. The middle bucket is checked where it is
+#   actually derived — `tests/test_table_coverage.py` for the derivation, INV-5's browser
+#   check for its atom.
+#
+#   `rules-proposal-needs-review-held` shared `/tables/orders/rules` with
+#   `rules-facing-panes`, and came out byte-identical too (md5
+#   ed9a0d4cef028e8996b5aedf8cc9ffcf, on three independent runs). It also could not render
+#   what it was named for: a proposal is a model call and the demo fixture makes none, so
+#   the pane in its PNG read "Accept 0 — I vouch for each of these · 0 / 8" over an empty
+#   list. Giving it a step that produced a real proposal was the alternative and was not
+#   taken: a billed, non-deterministic call is the one thing a photograph may not depend
+#   on. The proposal pane is checked where it is real — `tests/e2e/test_f12_translation_desk.py`.
+#
+# A baseline that cannot fail while its neighbour passes asserts nothing its neighbour does
+# not, and approving both would have put a human signature on a duplicate.
 STATES = {
     "role-door": "/",
     "tables-three-buckets": "/tables",
@@ -194,7 +214,6 @@ STATES = {
     # baseline named for a disclosure control would be a photograph of something that no
     # longer exists. Same state, correctly named.
     "rules-facing-panes": "/tables/orders/rules",
-    "rules-proposal-needs-review-held": "/tables/orders/rules",
     "review-queue-with-caveat": "/review",
     "rule-permalink-standalone": "/rules/RULE_FIXTURE_ID",
     "run-record-in-flight": "/runs/RECORD_FIXTURE_ID",
@@ -211,72 +230,18 @@ CHANNEL_TOLERANCE = 12
 # Chromium point release, and a check that cries wolf teaches people to delete it.
 PIXEL_BUDGET = 0.002
 
-# States whose rendered content is not a function of the code alone. `rule_id` resolves
-# to whichever rule the store hands over first, so that screenshot is a picture of a
-# RULE rather than of a screen, and committing one would go red the next time anybody
-# proposes a rule with a lower id. Named here rather than skipped quietly — the fix is a
-# fixed demo rule, which bead dq-cyi.2 (B23) needs for its own reasons.
-DATA_DEPENDENT = {
-    # F10's screen, named with THIS bead — and it is the same reason as F12's below,
-    # arrived at the same way: the screen was built, the shot was taken, and the picture
-    # turned out to be of a database. Every row carries `accepted_rules`, and this layer
-    # accepts rules (`test_draft_compile_does_not_persist_until_accept` saves one per run
-    # by design); the middle bucket's row carries the RECORD ID of a record
-    # `conftest.coverage_records` mints fresh every session, rendered as link text. Two
-    # things that are supposed to differ, on every run, in the same 1280x727 frame.
-    "tables-three-buckets": (
-        "every row states how many accepted rules the table has and this layer accepts "
-        "rules, and the middle bucket's row prints the id of a record minted by the "
-        "fixture this session — so the shot differs from the last one in two places that "
-        "are SUPPOSED to differ. It needs B23's fixed demo data, like the four below"
-    ),
-    # F11's, named with this bead for the same reason and with the loudest evidence: the
-    # written PNG was 1280x12430 and 1.3 MB — thirty-eight cards, most of them the same
-    # rule, accumulated by repeated runs of this layer into an append-only store (F6).
-    "review-queue-with-caveat": (
-        "the queue renders every rule anybody has flagged, and the store is append-only "
-        "(F6) while THIS LAYER WRITES TO IT — the first shot was 12,430 pixels tall and "
-        "held thirty-eight cards, most of them duplicates left by earlier runs. That is a "
-        "photograph of a database, and it would go red on the next run of the target that "
-        "produced it. B23's fixed demo data is what makes this screen photographable"
-    ),
-    "rule-permalink-standalone": (
-        "the rule it renders is whichever the store hands over first, so a baseline of it "
-        "would be a picture of one rule and would break when another is proposed. It needs "
-        "a fixed demo rule id (B23) before a screenshot of it means anything"
-    ),
-    # F12's two states, named with bead dq-rbf.4 — the bead that finally rendered the
-    # screen underneath them, which is also what made the problem visible.
-    "rules-facing-panes": (
-        "the desk renders every rule the table has, and THIS LAYER WRITES RULES: "
-        "fixtures_f12.held_rule creates one when none is held, and "
-        "test_draft_compile_does_not_persist_until_accept saves one on every run by "
-        "design — the store is append-only (F6), so neither can clean up after itself. A "
-        "baseline here would be a photograph of a database rather than of a screen, and "
-        "it would go red on every run. It needs the fixed demo table B23 already needs"
-    ),
-    "rules-proposal-needs-review-held": (
-        "the same screen and the same reason, doubled: the held row it is named for sits "
-        "in a list whose length changes every session, and the proposals above it come "
-        "from a model call whose wording is not a function of the code. B23's fixed demo "
-        "data is what makes both photographable"
-    ),
-    "run-record-in-flight": (
-        "a run record's id and the moment it finished are ON the screen, and both are minted "
-        "by the run that wrote it — records are immutable, so the fixture executes a new one "
-        "each session and every screenshot differs from the last in two places that are "
-        "supposed to differ. The mid-flight state is worse still: which rules have settled "
-        "depends on how far a real 17 s run had got when the shutter opened. Both need a "
-        "FIXED demo record (B23), which is the same thing the rule permalink needs and for "
-        "the same reason — until then a baseline here would go red on every run and teach "
-        "people to re-approve it without looking, which is the one habit this check exists "
-        "to prevent"
-    ),
-}
+# WHAT USED TO BE HERE: `DATA_DEPENDENT`, five states and one named reason each, all of
+# them the same reason — the screen behind it was built and green behaviourally, and what
+# it RENDERED was a function of an append-only store this layer writes to rather than of
+# the code. Bead dq-vix removed the cause instead of the symptom: the photographs are now
+# taken on the demo store, which is seeded once by `seed/seed_demo_rules.py` and written
+# to by nothing here (`tests/fixtures_demo.py` holds the whole argument). The only
+# thing a state can pend for now is the one that must never become automatic — nobody
+# has looked at the picture yet.
 
 
 def _approved(baseline: pathlib.Path) -> bool:
-    """Is this baseline tracked by git — i.e. has a person put their name on it?
+    """Is this baseline the picture a person staged — tracked, AND unmodified since?
 
     THE MACHINE THAT TOOK THE SCREENSHOT MAY NOT CERTIFY IT. Every other check here
     compares the app against something written down by a human; a visual baseline is
@@ -285,23 +250,38 @@ def _approved(baseline: pathlib.Path) -> bool:
     check over an image nobody ever looked at, which is the exact shape VERIFICATION
     §10 exists to prevent.
 
-    `git ls-files` is read-only and asks the one question that has a real answer:
-    somebody staged this file. A repository with no git (a tarball, a Docker layer)
-    answers "no" and the state keeps pending, which is the right way round — the
-    unapproved case must never be the silent one.
+    TWO QUESTIONS, BECAUSE THERE ARE TWO DOORS (bead `dq-zyt`). `git ls-files` answers
+    *somebody staged this path*, which is the whole story the first time a state is
+    photographed. It stops being the whole story the moment the screen changes: overwriting
+    an already-tracked baseline leaves the PATH tracked, so the next run compares the new
+    shot against ITSELF and goes green over a picture nobody has looked at — the same habit
+    arriving through the second door, and it is not hypothetical (it is how `role-door.png`
+    passed once). `git diff --quiet` asks the question that actually matters — *is the
+    CONTENT the staged content* — so a re-shot baseline pends with the same sentence the
+    untracked case gets, and a re-approval costs a person the same look the first one did.
+
+    Both are read-only. A repository with no git (a tarball, a Docker layer) answers "no"
+    to both and the state keeps pending, which is the right way round — the unapproved case
+    must never be the silent one.
+
+    ponytail: `git diff` compares the working tree against the INDEX, so `git add` alone is
+    enough and a commit is not required. Ceiling: a staged-but-uncommitted approval survives
+    exactly as long as the index does. That is the right trade — `git add` is the act the pend
+    message asks for, and asking for a commit would make the check refuse a baseline a person
+    had just looked at and staged.
     """
-    found = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", str(baseline)],
-        cwd=REPO,
-        capture_output=True,
-        check=False,
+    return baseline.exists() and all(
+        subprocess.run(argv, cwd=REPO, capture_output=True, check=False).returncode == 0
+        for argv in (
+            ["git", "ls-files", "--error-unmatch", str(baseline)],
+            ["git", "diff", "--quiet", "--", str(baseline)],
+        )
     )
-    return baseline.exists() and found.returncode == 0
 
 
 @pytest.mark.parametrize("state", list(STATES))
 def test_visual_regression_against_committed_baseline(
-    state: str, driver: Driver, rule_id: str, record_id: str
+    state: str, demo_driver: Driver, request: pytest.FixtureRequest
 ) -> None:
     """Screenshot-and-diff each key state against a committed baseline.
 
@@ -312,12 +292,20 @@ def test_visual_regression_against_committed_baseline(
     approving is not. Without that gate the run would photograph whatever it rendered
     and pass against its own photograph from the next run on.
 
-    **What a state pends FOR is named, one reason per state** (`DATA_DEPENDENT`), and
-    every one of them says the same thing in a different way: the screen behind it is
-    built and what it renders is not a function of the code alone. A baseline of one of
-    those is a photograph of a database — it goes red on the next run and teaches people
-    to re-approve without looking, which is the one habit this check exists to prevent.
-    They clear together, with B23's fixed demo data.
+    **IT IS THE DEMO STACK IN THE FRAME, NOT THE ONE THIS LAYER WRITES TO** (bead
+    dq-vix). The three checks above take the shared stack, because a console error and a
+    layout shift are properties of the code whatever is in the store. A photograph is
+    not: five of these six states used to pend by name because the store behind them
+    was one this layer appends to on every run, so the picture was of a database — the
+    review queue's first shot was 12,430 pixels tall and held thirty-eight cards, most
+    of them the same rule. `demo_driver` opens a fixed fixture instead, and the only
+    reason left to pend is that nobody has looked at the picture yet.
+
+    THE TWO ID FIXTURES ARE RESOLVED PER ROUTE, NOT PER SIGNATURE. Requesting them by
+    signature made every state — `role-door` among them, whose route is `/` and holds
+    neither placeholder — depend on a demo store that no make target seeds, so the one
+    state with an approved baseline turned into a skip on a fresh clone. `getfixturevalue`
+    asks for an id only where a placeholder says a route names a thing.
 
     ponytail: Pillow, imported inside the function, and a per-channel tolerance rather
     than a perceptual diff. Pillow is not a dependency of `make check` and must not
@@ -325,19 +313,19 @@ def test_visual_regression_against_committed_baseline(
     collection time — that exact mistake is why the first version of this was deleted
     (VERIFICATION.md §4.3). Ceiling: this compares pixels, so a layout that moved
     everything down four pixels is as red as a screen that lost its buttons. That is
-    the right trade for eight named states and the wrong one for eighty.
+    the right trade for six named states and the wrong one for eighty.
     """
     from PIL import Image, ImageChops  # noqa: PLC0415 — see the ponytail note above
 
     route = STATES[state]
-    _settled(driver, route, rule_id, record_id)
-    if state in DATA_DEPENDENT:
-        pending(f"{state} — {DATA_DEPENDENT[state]}")
+    rule_id = request.getfixturevalue("demo_rule_id") if RULE_PLACEHOLDER in route else ""
+    record_id = request.getfixturevalue("demo_record_id") if RECORD_PLACEHOLDER in route else ""
+    _settled(demo_driver, route, rule_id, record_id)
 
     BASELINES.mkdir(exist_ok=True)
     baseline = BASELINES / f"{state}.png"
     actual = baseline.with_suffix(".actual.png")
-    actual.write_bytes(driver.page.screenshot(full_page=True))
+    actual.write_bytes(demo_driver.page.screenshot(full_page=True))
     if not _approved(baseline):
         actual.replace(baseline)
         pending(
@@ -363,6 +351,7 @@ def test_visual_regression_against_committed_baseline(
     assert share <= PIXEL_BUDGET, (
         f"{state} moved {share:.2%} of its pixels (budget {PIXEL_BUDGET:.2%}). The new "
         f"screenshot is at {actual.relative_to(REPO)}; if the change was meant, replace the "
-        "baseline with it and commit that as the approval."
+        "baseline with it and `git add` that as the approval — a replaced baseline PENDS "
+        "until you do rather than quietly becoming the new truth (`_approved`)."
     )
     actual.unlink()

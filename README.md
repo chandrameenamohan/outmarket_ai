@@ -12,6 +12,8 @@ account, not a route.
 - The spec, with observable acceptance for every feature: [`SPEC.md`](./SPEC.md)
 - How it is checked, and what is deliberately not checked: [`VERIFICATION.md`](./VERIFICATION.md)
 - What was measured before anything was built: [`learning-tests/FINDINGS.md`](./learning-tests/FINDINGS.md)
+- **How AI tools were actually used to build this**, including what was refused and what
+  was deleted: [`AI_USAGE.md`](./AI_USAGE.md)
 - The state of the work, for whoever picks it up next: [`HANDOFF.md`](./HANDOFF.md)
 
 ---
@@ -28,10 +30,20 @@ named`), and it fails rather than skips the moment that variable points at somet
 git clone <this repo> && cd outmarket_ai
 cp .env.example .env          # then fill it in — see "Credentials", below
 docker compose up --build     # first build ~2 min; then open http://localhost:3000
+make demo-fixture             # ONE MORE STEP, in a second terminal — see below. Without it the
+                              # product looks broken while working perfectly
 ```
 
-That is the whole ritual. There is no database to install: the stack talks to the PostgreSQL
-instance your `.env` points at.
+There is no database to install: the stack talks to the PostgreSQL instance your `.env` points at.
+
+**Do not skip the last line.** The tables are only half the demo; the other half is the rule store,
+and a fresh one holds nothing — the review queue says nothing is waiting, the coverage dashboard
+says nothing has been run, and a working product looks like a broken one. `make demo-fixture` seeds
+eight rules and two run records, and it is safe to re-run: the store is append-only, so a second run
+appends nothing. If you would rather not have a local Python, the image you just built already
+carries the script and the same trick works as for the tables below:
+`docker compose run --rm --entrypoint python3 api seed/seed_demo_rules.py`. Either way, the section
+"If the product looks empty" says what goes in and why.
 
 Stop it with `Ctrl-C`, or `docker compose down`.
 
@@ -111,6 +123,23 @@ seeded into it on purpose. Same trick, same image:
 docker compose run --rm --entrypoint python3 api seed/seed_demo_data.py
 ```
 
+### If the product looks empty — seed the demo RULES too
+
+The tables are half of the demo. The other half is the rule store, and a fresh one is empty: the
+review queue says nothing is waiting, the coverage dashboard says nothing has been run, and the
+product looks broken while working perfectly. One command fixes it, and it is safe to re-run —
+it appends only what is missing, because the store is append-only by trigger and cannot be edited:
+
+```bash
+make demo-fixture
+```
+
+Eight rules over three tables and two run records, deliberately chosen to show every state the
+screens exist to render — accepted rules that pass, accepted rules that fail against the planted
+defects, one held for review, one rejected with its reason, and one reading that *errored* rather
+than failed. `seed/seed_demo_rules.py` is the fixture and explains each choice. Every rule goes in
+through the validator, exactly as if a person had typed it (INV-2).
+
 ---
 
 ## The IPv6 trap
@@ -185,7 +214,15 @@ DQ_SCHEMA=dq_check uv run --no-project --with great-expectations --with 'sqlalch
 DQ_API_URL=http://localhost:8000 npm --prefix web run start   # :3000
 
 make check-ui                    # the browser layer, against both of the above
+make check-ge                    # the GE layer — safe to run at the same time as check-ui
 ```
+
+`DQ_SCHEMA=dq_check` on the API process is the **browser layer's own** scratch schema, and it is not
+optional: pytest pins the same name from the markers it selected, and the layer asks that process for
+a run record it has just written, so a server on any other schema fails by name rather than quietly
+rendering a different store. `make check-ge` writes `dq_check_ge` for the same reason — the two
+layers used to share one append-only schema and take each other red (VERIFICATION §4.7.2).
+`make reset-scratch` drops both; `ARGS=dq_check_ge` drops one. Neither layer ever writes to `dq`.
 
 `VERIFICATION.md` §1 is the authority on all of it, including the two layers that cost money or
 need the network and are therefore outside `make check`.

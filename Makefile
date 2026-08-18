@@ -24,9 +24,16 @@ PY := python3
 # erroring on a missing path. It starts being linted the moment it appears.
 # This is the PYTHON scope and stays that way — the Next app lives in web/ so that
 # ruff and mypy are never pointed at TypeScript, and `check-js` at TypeScript only.
-SRC := $(wildcard app) tests
+#
+# `seed` joined in the craft pass after bead dq-vix, and what it costs is one line here:
+# the gate was green over 329 lines of seed/seed_demo_rules.py that ruff, ruff format and
+# mypy never saw, and that file imports app.api.server, app.dq.run and app.rules.store.
+# The one frozen script inside it, seed/seed_demo_data.py, is excluded BY NAME in
+# pyproject.toml with the reason — a directory exclusion that keeps growing new files is
+# how a deliberate omission becomes an undiscovered one.
+SRC := $(wildcard app) tests seed
 
-.PHONY: check lint format typecheck test check-js check-ui check-ge
+.PHONY: check lint format typecheck test check-js check-ui check-ge demo-fixture reset-scratch
 
 check: lint format typecheck test check-js
 
@@ -61,9 +68,13 @@ check-js:
 # It needs the framework and the database, so it is started with the same `uv run` line
 # the `ge` layer uses — the command is in VERIFICATION.md §1.
 #
-# DQ_SCHEMA=dq_check on that process is not a detail: tests/conftest.py sets the same
-# scratch schema for exactly the reason stated there — the store is append-only, so a
-# check that wrote to the demo's own schema could not clean up after itself.
+# DQ_SCHEMA=dq_check on that process is not a detail, and it is the BROWSER LAYER'S OWN
+# scratch schema rather than a shared one (bead dq-cyi.4): the store is append-only, so a
+# check that wrote to the demo's own schema could not clean up after itself, and a check
+# that shared a schema with `check-ge` would read counts that layer was moving. pytest
+# pins the same name from the markers it selected (tests/scratch.py), and `coverage_records`
+# asks this process for a record it just wrote — so a server started on the wrong schema
+# FAILS the layer by name instead of quietly rendering somebody else's store.
 # The layer also SOURCES ./.env, which arrived with F10 (bead dq-rbf.2). One check needs
 # a run record in the middle bucket — "ran, but unverifiable" — and the shipping
 # configuration cannot produce one: the row cap is off (SPEC O-2) so no run is sampled,
@@ -88,6 +99,11 @@ check-js:
 # ports, against a store schema it drops first: §7 opens on "no rules exist" and the shared
 # store is append-only, so the flow cannot run on the two servers above. It needs nothing
 # from this recipe beyond ./.env and the ports below being alive — see VERIFICATION.md §4.6.
+#
+# THE VISUAL STATES START TWO MORE, for the opposite reason (bead dq-vix). A screenshot of a
+# screen this layer WRITES to is a photograph of a database, so the six baselines are taken
+# against the DEMO store `dq` — which `make demo-fixture` seeds once and nothing here writes
+# to. They navigate and do nothing else: no model call, no run. `tests/fixtures_demo.py`.
 check-ui:
 	set -a; [ -f ./.env ] && . ./.env; set +a; \
 	APP_URL=$(or $(APP_URL),http://localhost:3000) \
@@ -107,14 +123,59 @@ check-ui:
 # checks (F15) re-run seed/seed_demo_data.py itself, which imports psycopg 3, in a
 # subprocess of THIS interpreter — and an ephemeral env inherits no site-packages.
 #
-# RUN THIS ALONE, NOT ALONGSIDE `check-ui`. Both layers pin DQ_SCHEMA=dq_check and both
-# WRITE to it, and the store is append-only (F6) — so a check that counts rules before
-# and after an action is reading a number the other layer is also moving. Running the two
-# concurrently took BOTH red at close-out with nothing wrong with either; the numbers and
-# the reasoning are in VERIFICATION.md 4.7.2, and bead dq-cyi.4 owns giving them a schema
-# each. This is a comment rather than a lock because a lock in a Makefile is a second
-# thing to get wrong, and the two targets are minutes long and run deliberately.
+# RUN IT ALONGSIDE `check-ui` IF YOU LIKE — that is fixed (bead dq-cyi.4), and it used to
+# take both layers red. They both WRITE and the store is append-only (F6), so while they
+# shared DQ_SCHEMA=dq_check a check counting rules before and after an action was reading
+# a number the other layer was moving: VERIFICATION.md §4.7.2 has both failures and the
+# reasoning. Neither assertion was loosened. The layers now have a scratch schema each —
+# this one writes `dq_check_ge` — and the schema comes from the MARKERS pytest selected
+# (tests/scratch.py), so it is not a variable a target, a shell or .env can get wrong, and
+# a process that collected both layers is refused before it writes a row.
+#
+# `make reset-scratch` drops both scratch schemas. Neither layer ever writes to `dq`.
 check-ge:
 	set -a; . ./.env; set +a; \
 	uv run --no-project --with pytest --with great-expectations --with 'sqlalchemy>=2' \
 	  --with psycopg2-binary --with 'psycopg[binary]' $(PY) -m pytest -m ge
+
+# The fixed demo fixture (bead dq-vix): eight rules and two run records in the DEMO
+# store `dq`, which is the store the app reads with no DQ_SCHEMA set. It is what makes
+# the five data-dependent visual states photographable — the browser layer never writes
+# here, so what those screens render is the same twice running. One state those screens
+# render is NOT in here and cannot be: an unsaved proposal is a model call, so the seeder
+# says so in its own docstring rather than claiming to cover everything.
+#
+# NOT part of any check target. It writes to the demo's own store, and a gate that
+# seeded the thing it photographs would be photographing itself.
+#
+# Idempotent: re-running appends nothing. `make demo-fixture ARGS=--reset` drops the
+# schema first, which is the only reset an append-only store has — and it mints new ids,
+# so every visual baseline then needs a person's eye again. Same `uv` line as check-ge,
+# minus pytest: the validator's second layer constructs every rule against Great
+# Expectations (INV-2) and the `orders` record is a real run.
+demo-fixture:
+	set -a; . ./.env; set +a; \
+	uv run --no-project --with great-expectations --with 'sqlalchemy>=2' \
+	  --with psycopg2-binary $(PY) seed/seed_demo_rules.py $(ARGS)
+
+# The reset for the two scratch schemas `check-ui` and `check-ge` accumulate rules and
+# run records in — `dq_check` and `dq_check_ge`, named once in tests/scratch.py and read
+# from there rather than repeated here. NEVER the demo store `dq`: that one is seeded by
+# `make demo-fixture`, it is what the visual baselines photograph, and it is not scratch.
+#
+# `DROP SCHEMA ... CASCADE` is the only reset an append-only store has — both stores
+# refuse DELETE and TRUNCATE by trigger, from the owner included (F6). It runs as
+# `dq_system` on SUPABASE_DB_URL_SYSTEM, not as the database owner, because dq_system
+# CREATED these schemas and therefore owns them (app/db/roles.sql §2).
+#
+# `make reset-scratch ARGS=dq_check_ge` drops ONE of them, which is the common case: the
+# layer you are working on, without disturbing the other. Any name outside tests/scratch.py
+# is refused, so `ARGS=dq` is an error rather than the worst thing this target could do.
+#
+# Safe whenever a scratch store has grown untidy, but reset ahead of a FULL run of the
+# layer rather than of one check: `check-ui` rebuilds what it needs in file order — F12's
+# fixtures write the first `orders` rule (tests/fixtures_f12.py) before the permalink
+# checks read one — and `conftest.rule_id` fails on an empty store by design.
+reset-scratch:
+	set -a; . ./.env; set +a; \
+	PYTHONPATH=tests $(PY) -c "import scratch; scratch.reset()" $(ARGS)
