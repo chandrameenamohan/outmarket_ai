@@ -16,12 +16,20 @@ requires-python = ">=3.12"
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-# Gate scope. `learning-tests/` and `seed/` are DELIBERATELY excluded: they are
-# one-shot empirical scripts whose findings live in their docstrings, already
-# written before the gate existed, and re-flowing them would destroy the
-# provenance the take-home is graded on. See VERIFICATION.md §3 for the exact
-# count of findings that exclusion hides — it is visible, not silent.
-extend-exclude = ["learning-tests", "seed", ".claude"]
+# Gate scope. `learning-tests/` and `seed/seed_demo_data.py` are DELIBERATELY
+# excluded: they are one-shot empirical scripts whose findings live in their
+# docstrings, already written before the gate existed, and re-flowing them would
+# destroy the provenance the take-home is graded on. See VERIFICATION.md §3 for the
+# exact count of findings that exclusion hides — it is visible, not silent.
+#
+# THE EXCLUSION NAMES A FILE AND NOT `seed/`, since the craft pass. It used to be the
+# whole directory, and `seed/seed_demo_rules.py` then arrived inside it — 300+ lines
+# written AFTER the gate existed, importing `app.api.server`, `app.dq.run` and
+# `app.rules.store`, i.e. exactly the code a type error would hide in. A directory
+# exclusion that keeps growing new files is how a deliberate omission becomes an
+# undiscovered one; the argument above is about scripts frozen before the gate
+# existed, so the exclusion names those and nothing else.
+extend-exclude = ["learning-tests", "seed/seed_demo_data.py", ".claude"]
 
 [tool.ruff.lint]
 select = [
@@ -48,7 +56,7 @@ python_version = "3.12"
 ignore_missing_imports = true          # great_expectations / playwright ship no usable stubs
 warn_unused_ignores = true
 warn_redundant_casts = true
-exclude = "^(learning-tests|seed)/"
+exclude = "^(learning-tests/|seed/seed_demo_data\\.py$)"   # see the ruff note above
 
 [[tool.mypy.overrides]]
 module = "tests.*"
@@ -80,5 +88,5 @@ markers = [
 # (VERIFICATION.md §9). A marker for a resolved blocker is a place for a stub to hide.
 
 [tool.ruff.lint.isort]
-# `conftest` is imported by path, not as a package. Tell isort it is ours.
-known-first-party = ["app", "conftest"]
+# `conftest` and `scratch` are imported by path, not as a package. Tell isort they are ours.
+known-first-party = ["app", "conftest", "scratch"]

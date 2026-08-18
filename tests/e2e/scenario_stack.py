@@ -53,12 +53,21 @@ from typing import Any
 
 import pytest
 
+import scratch
 from conftest import REPO, Driver, pending
 
 # The scenario's own store schema. Never `dq` (the demo's) and never `dq_check` (the rest
 # of the browser layer's) — this one is dropped on the way in, so it may not be a schema
 # anything else is holding state in.
 SCENARIO_SCHEMA = "dq_scenario"
+
+# SPEC §7 makes three real, billed model calls, and this module boots the process that
+# makes them — so the credential in THIS environment is the one that process will get
+# (`_process` passes `os.environ` through). Spelled here rather than imported from
+# `app/model.py::TOKEN_VAR`, for the same reason DSN_VAR is: importing that module to read
+# one string costs 0.65 s of claude_agent_sdk at COLLECTION time, and `make check` collects
+# this file before it deselects it.
+TOKEN_VAR = "CLAUDE_CODE_OAUTH_TOKEN"
 
 # The system DSN, named here rather than imported, because importing `app.db.system` to
 # read one string would pull psycopg2 into a module that pends when it is missing.
@@ -145,7 +154,20 @@ def scenario(chromium: Any) -> Iterator[Scenario]:
     Depending on `chromium` also inherits the browser layer's entry condition — `APP_URL`
     unset pends before the stack is booted, which is the right order for a fixture that
     starts two servers and drops a schema.
+
+    THE TOKEN IS CHECKED HERE AND NOT IN `scenario_stack`, because this is the caller that
+    spends it: the demo-fixture stack (`tests/fixtures_demo.py`) boots the same two
+    processes and only navigates. Without it §7 booted happily and died three and a half
+    minutes later on `Page.wait_for_selector: Timeout 180000ms exceeded — waiting for
+    locator("[data-row='proposed']")`, which is the gate blaming the screen for a variable
+    nobody set. Same shape as `scratch.agrees`, and the same reason.
     """
+    if not os.environ.get(TOKEN_VAR):
+        pending(
+            f"{TOKEN_VAR} is unset, so SPEC §7 has nothing to make its three billed model "
+            "calls with — steps 2, 5 and 6 would wait three minutes for a proposal that is "
+            "never coming. `make check-ui` sources ./.env; run it through the make target."
+        )
     with scenario_stack() as stack:
         live = Scenario(stack=stack, browser=chromium)
         yield live
@@ -154,27 +176,36 @@ def scenario(chromium: Any) -> Iterator[Scenario]:
 
 
 @contextlib.contextmanager
-def scenario_stack() -> Iterator[Stack]:
-    """A pristine store, an API process on it, and a Next process in front of that."""
+def scenario_stack(schema: str = SCENARIO_SCHEMA, reset: bool = True) -> Iterator[Stack]:
+    """A store, an API process on it, and a Next process in front of that.
+
+    TWO CALLERS AND ONE ASYMMETRY, which is why both are arguments. §7 takes the default
+    and gets its own schema dropped on the way in, because the flow opens on *"no rules
+    exist"*. The visual-regression states take `reset=False` against the DEMO store
+    (`tests/fixtures_demo.py`), because what they need is the opposite: a store nobody
+    — this layer least of all — has written to since a person approved a photograph of it.
+    A stack with `reset=False` may therefore never be handed to a check that WRITES.
+    """
     for variable in (DSN_VAR, "SUPABASE_DB_URL_DIRECT"):
         if not os.environ.get(variable):
             pending(
                 f"{variable} is unset, so SPEC §7 has no database to run against. "
                 "`make check-ui` sources ./.env; run it through the make target."
             )
-    _reset_schema()
+    if reset:
+        _reset_schema(schema)
     api_port, web_port = _free_port(), _free_port()
     api_url, app_url = f"http://127.0.0.1:{api_port}", f"http://127.0.0.1:{web_port}"
-    api = {"DQ_SCHEMA": SCENARIO_SCHEMA, "DQ_API_PORT": str(api_port)}
+    api = {"DQ_SCHEMA": schema, "DQ_API_PORT": str(api_port)}
     web = {"PORT": str(web_port), "DQ_API_URL": api_url}
-    with _process(API_ARGV, api, "the scenario's Python process") as python_process:
+    with _process(API_ARGV, api, f"the Python process on {schema}") as python_process:
         _await(f"{api_url}/tables", API_BOOT_SECONDS, python_process)
-        with _process(WEB_ARGV, web, "the scenario's Next process") as next_process:
+        with _process(WEB_ARGV, web, f"the Next process on {schema}") as next_process:
             _await(app_url, WEB_BOOT_SECONDS, next_process)
             yield Stack(app_url=app_url, api_url=api_url)
 
 
-def _reset_schema() -> None:
+def _reset_schema(schema: str) -> None:
     """`DROP SCHEMA ... CASCADE`, before anything connects to it.
 
     The DDL in `app/rules/store.sql` and `app/dq/runs.sql` starts with `create schema if
@@ -182,12 +213,27 @@ def _reset_schema() -> None:
     its first write. That is why this is a drop and not a delete: the triggers refuse
     DELETE and TRUNCATE from the owner too, which is what makes F6 a fact about the
     database — and it means the only honest reset is to take the whole schema away.
+
+    IT REFUSES THE DEMO STORE, which is the guard `scratch.pin` already carries and this
+    function needed the moment `reset` became an argument: one transposed call —
+    `scenario_stack(DEMO_SCHEMA, reset=True)` at the `fixtures_demo.demo` site — would drop
+    the fixture every baseline was taken against, mint new rule and record ids, and silently
+    invalidate every approval a person has given or is about to give.
+    `seed/seed_demo_rules.py` states that consequence for its own `--reset`; it may not be
+    reachable by accident from here.
     """
+    if schema == scratch.DEMO_SCHEMA:
+        raise pytest.UsageError(
+            f"a stack asked to reset {schema!r}, which is the DEMO store — the fixed fixture "
+            "the visual baselines are taken against (seed/seed_demo_rules.py). Dropping it "
+            "mints new rule and record ids and invalidates every approval. Scratch schemas "
+            "are in tests/scratch.py::LAYERS; this flow's own is SCENARIO_SCHEMA."
+        )
     import psycopg2  # noqa: PLC0415 — a driver `make check` is not owed
 
     conn = psycopg2.connect(os.environ[DSN_VAR], connect_timeout=30)
     with contextlib.closing(conn), conn, conn.cursor() as cur:
-        cur.execute(f"drop schema if exists {SCENARIO_SCHEMA} cascade")
+        cur.execute(f"drop schema if exists {schema} cascade")
 
 
 def _free_port() -> int:

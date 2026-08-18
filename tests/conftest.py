@@ -26,20 +26,24 @@ from typing import Any, NoReturn
 
 import pytest
 
+import scratch
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
-# No check ever writes to the schema the demo reads from. The rule store is
-# append-only by design (F6), so a check that writes CANNOT clean up after itself —
-# and an accepted junk rule would not merely be untidy, it would execute and count
-# toward coverage. Set before any test imports app/rules/store.py.
-#
-# UNCONDITIONAL, not `setdefault`. `make check-ge` sources `.env` with `set -a`, and
-# `DQ_SCHEMA` is a documented key in .env.example — so a `setdefault` guard is
-# switched off by the very variable the setup instructions tell an operator to set,
-# and the layer starts writing unremovable rules into the demo's own store. A debug
-# escape hatch is not worth a guard that fails open on a supported configuration.
-SCRATCH_SCHEMA = "dq_check"
-os.environ["DQ_SCHEMA"] = SCRATCH_SCHEMA
+# No check writes to the schema the demo reads from, and no layer writes into another
+# layer's. `tests/scratch.py` owns the names, the argument and the guards — including
+# why this pin is unconditional rather than deferring to a `DQ_SCHEMA` in the environment.
+scratch.pin(scratch.DEFAULT)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(items: list[Any]) -> None:
+    """Narrow that pin to the layer pytest actually SELECTED, or refuse to run at all.
+
+    `trylast` because `-m` is itself implemented in this hook: without it we would see
+    every collected item and `make check` would look like all three layers at once.
+    """
+    scratch.pin(scratch.for_layers(items))
 
 
 def pending(what: str) -> NoReturn:
@@ -278,8 +282,9 @@ def coverage_records(api_url: str) -> dict[str, Any]:
 
     Records are immutable and append-only (F9), so this cannot clean up after itself and
     does not try: each run of the browser layer appends one more record per table and the
-    newest is the one the screen reads. It writes to `conftest.SCRATCH_SCHEMA`, never to
-    the store the demo reads from.
+    newest is the one the screen reads. It writes to the browser layer's own scratch
+    schema (`tests/scratch.py`), never to the store the demo reads from — and it checks
+    that the API process is in that same schema rather than assuming it.
 
     Depends on `api_url` so it never runs during `make check`, and on a DSN it refuses to
     guess at: unset -> PENDING naming the line that sets it; set and silent -> the store's
@@ -293,10 +298,16 @@ def coverage_records(api_url: str) -> dict[str, Any]:
             f"{system.DSN_VAR} is unset, so F10's buckets have no records to be derived from. "
             "`make check-ui` sources ./.env; run it through the make target, or export it."
         )
-    return {
+    saved = {
         table: runs.save(*completed_run(table, verdicts, scanned, total))
         for table, verdicts, scanned, total in SEEDED_RUNS
     }
+    # ONE STORE, TWO PROCESSES, and `DQ_SCHEMA` is the only thing making them one — a
+    # mismatch is otherwise not an error anywhere, just F10's middle bucket coming up
+    # empty and blaming the product for a variable somebody typed once.
+    for written in saved.values():
+        scratch.agrees(api_url, written.record_id)
+    return saved
 
 
 @pytest.fixture(scope="session")
@@ -380,5 +391,9 @@ def source_files(*subdirs: str) -> list[pathlib.Path]:
 # registers them — `held_rule` is the row F12 must render with no checkbox, and `record`
 # and `record_id` are what the run-record route and its hygiene checks are addressed by.
 # See those two files for why they are not in this one.
+# B25's are the other half of the same argument: the two below WRITE, so the screens they
+# set up cannot be photographed. `fixtures_demo` boots the product on the DEMO store — the
+# one nothing here writes to — and is what the visual-regression states are addressed by.
+from fixtures_demo import demo, demo_driver, demo_record_id, demo_rule_id  # noqa: E402, F401
 from fixtures_f12 import api_rules, held_rule  # noqa: E402, F401
 from fixtures_f13 import record, record_id, run_table  # noqa: E402, F401

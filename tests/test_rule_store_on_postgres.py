@@ -11,9 +11,11 @@ the front door and passes proves the front door works; that one proves there is
 no other door.
 
 They cannot clean up after themselves — the table is append-only, which is the
-whole point — so they write to a scratch schema (`conftest.SCRATCH_SCHEMA`) and
-never to the store the demo reads from. An accepted junk rule there would not
-merely be untidy: it would execute and count toward coverage.
+whole point — so they write to the GE layer's OWN scratch schema (`dq_check_ge`,
+`tests/scratch.py`) and never to the store the demo reads from. An accepted junk rule
+there would not merely be untidy: it would execute and count toward coverage. The
+schema is the ge layer's alone so that `make check-ui` can run at the same time
+without either layer moving the other's counts (bead dq-cyi.4).
 
 Marked `ge` with the rest of the layer that needs a live database, and run by
 `make check-ge`. `make check` installs nothing and reaches no network, so these

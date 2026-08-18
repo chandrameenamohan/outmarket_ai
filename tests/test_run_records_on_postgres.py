@@ -19,8 +19,9 @@ Four claims, and each is the kind only a database (or a real run) can settle:
                                   is the only thing that can do this job.
 
 They WRITE, and the table is append-only by design, so they cannot clean up after
-themselves — they write to the scratch schema (`conftest.SCRATCH_SCHEMA`) and never to
-the store the demo reads from.
+themselves — they write to the GE layer's own scratch schema (`dq_check_ge`,
+`tests/scratch.py`) and never to the store the demo reads from, nor to the browser
+layer's, which is what lets the two targets run at once (bead dq-cyi.4).
 
 Marked `ge` with the rest of the layer that needs a live database and the framework,
 and run by `make check-ge`.

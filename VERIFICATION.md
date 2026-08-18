@@ -7,11 +7,11 @@ launches Chromium against a real Next process in front of a real Python process 
 seeded Supabase database, with console, network and axe recorders attached before first paint, and
 it has been made to go red on a planted break or a dead endpoint on **five recorded occasions** and
 restored every time — §4.2, §4.6 twice, §4.7 and §8.1.
-**Runs today** (`check` and `check-ui` re-measured 2026-08-17 at close-out): `make check`
-exits 0 with **187 passed, 0 skipped** in 2.73 s (97 deselected — the browser, GE and billed-model
-layers, which belong below). The markers cover all **284** collected checks: 187 default + 33 `ge`
-+ 61 `e2e` + 6 `live`. **They stopped being a partition with F12** and the overlap is deliberate
-and exactly three: `tests/e2e/test_f12_translation_desk.py`'s two authoring checks carry `e2e` AND
+**Runs today** (all three targets re-measured 2026-08-18 at 08:50, launched concurrently — §4.7.2
+has the block): `make check` exits 0 with **187 passed, 0 skipped** in 2.88 s (96 deselected — the
+browser, GE and billed-model layers, which belong below). The markers cover all **283** collected
+checks: 187 default + 33 `ge` + 60 `e2e` + 6 `live`. **They stopped being a partition with F12**
+and the overlap is deliberate and exactly three: `tests/e2e/test_f12_translation_desk.py`'s two authoring checks carry `e2e` AND
 `live`, because F4's refusal and its unsaved-until-accepted promise need a browser *and* a real
 model call — and SPEC §7's scenario carries both for the same reason, three times over.
 `make check` excludes them twice over; `make check-ui` selects them on purpose, which is what
@@ -21,25 +21,31 @@ left.** INV-2's authoring gate (`app/rules/validator.py`, bead `dq-yov.4`) is wh
 those skips into assertions: every shipped invalid-rule probe is now refused before persistence —
 all 10 the framework alone accepts, plus one probe for each of the four rejection classes it does
 catch.
-**`make check-ui` runs the browser layer against the two booted processes: 52 passed, 9 skipped,
-223 deselected, 368.55 s** (re-measured 2026-08-17 at close-out, exit 0). The nine skips are
-the two delivery targets nobody named and the seven visual states — six data-dependent, one written
-and awaiting a human's eye. 21 of the 52 are 3 hygiene checks over
+**`make check-ui` runs the browser layer against the two booted processes: 52 passed, 8 skipped,
+223 deselected, 368.17 s**, exit 0.
+The eight skips are the two delivery targets nobody named and the six visual states whose
+baselines are **written and awaiting a human's eye** — none of them for data dependence any
+more, which is what `dq-vix` bought. 21 of them are 3 hygiene checks over
 7 routes (console-clean, layout stability and accessibility, §4.2/§4.4/§4.5); the rest are F10's,
 F11's, F12's, F13's and F14's own screens, plus **SPEC §7's end-to-end scenario, which is one check
-and 2 min 23 s of it** (bead `dq-cyi.2` — see §4.6).
+and about 2 min 23 s of it** (bead `dq-cyi.2` — see §4.6).
 
-**THE NINE SKIPS, AND THE STATUS OF THE VISUAL BASELINES, STATED ONCE.** Seven of the nine are the
-visual-regression states (§4.3) and two are the delivery targets nobody named (§8.1). Of the seven:
-**exactly one baseline image exists — `tests/e2e/__baselines__/role-door.png` — and it is NOT
-approved.** It is untracked, and *being tracked by git is what approval means here*; the check
-compares nothing until a person has opened it, decided it is the screen they meant, and staged it.
-**No agent may approve it, and no run of this harness has ever compared two screenshots.** The other
-six pend as `DATA_DEPENDENT` and cannot be photographed yet at all — bead `dq-vix` (B25) owns making
-them photographable, because what they render today is a function of an append-only store this very
-layer writes to rather than of the code. That is the honest state: the visual layer is *built and
-proven to discriminate* (§4.3 measured the diff going both ways at the 0.2% budget) and is
-*asserting nothing yet*. **`pytest -m live`**
+**THE EIGHT SKIPS, AND THE STATUS OF THE VISUAL BASELINES, STATED ONCE.** Six of the eight are
+visual-regression states (§4.3) and two are the delivery targets nobody named (§8.1). **No visual
+baseline is approved, `role-door` included, and an earlier draft of this section said the
+opposite.** That correction is bead `dq-zyt` and it is the most instructive thing in this document,
+so it is stated here rather than buried: `role-door` DID compare and pass on 2026-08-17 — against a
+picture no human ever staged. `_approved()` asked `git ls-files` whether the PATH was tracked, the
+re-shot PNG had overwritten a tracked path, and a baseline therefore self-approved by being written
+over. The old picture and the new one differ by **31.36% of their pixels against a 0.20% budget**,
+which is the best evidence in this repository that the visual layer discriminates on a real change —
+and the check called it approved anyway. `_approved()` now also asks `git diff --quiet`, so a
+tracked-but-MODIFIED baseline pends with the same sentence the untracked case gets, and `role-door`
+is back among the six. They are all photographed against the **demo** store, a fixed fixture in a
+schema this layer does not write to (`seed/seed_demo_rules.py`, `tests/fixtures_demo.py`, §4.3), and
+each of them writes its baseline and pends for the one reason that must never become automatic —
+**nobody has looked at the picture yet.** No agent may approve one; approval is a person's `git
+add`, and that mechanism has now had both of its doors shut. **`pytest -m live`**
 is 6 checks, 3 of which are also `e2e` and therefore inside `make check-ui`; the other 3 — the
 sandbox proof, F3's suggestion call and F4's own — are in no make target and are run deliberately.
 **Nothing in this harness is blocked on a learning test any more.** LT-1b (bead `dq-e1d`) landed and
@@ -121,9 +127,12 @@ make check-ui     # APP_URL=http://localhost:3000  DQ_API_URL=http://localhost:8
                   # The second one arrived with F14 (bead dq-rbf.1): a permalink that renders a
                   # rule's English statement, evidence line and actions has to READ a rule, so
                   # the screen is only real if the process behind it is. DQ_SCHEMA=dq_check is
-                  # the same scratch schema tests/conftest.py pins, for the same reason — the
-                  # store is append-only, so a check that wrote to the demo's own schema could
-                  # not clean up after itself.
+                  # the BROWSER LAYER'S OWN scratch schema, which tests/scratch.py pins from the
+                  # markers pytest selected — the store is append-only, so a check that wrote to
+                  # the demo's own schema could not clean up after itself, and one that shared a
+                  # schema with `check-ge` would read counts that layer was moving (§4.7.2).
+                  # A server started on any other schema fails this layer by name rather than
+                  # quietly rendering somebody else's store: `scratch.agrees`.
                   #
                   # The TARGET also sources ./.env now (bead dq-rbf.2, F10). One check needs a
                   # run record in the "ran, but unverifiable" bucket, and the shipping
@@ -143,8 +152,8 @@ make check-ui     # APP_URL=http://localhost:3000  DQ_API_URL=http://localhost:8
                   # proven without asking a model. Those two carry `live` as well as `e2e`,
                   # so `make check` excludes them twice over and `-m e2e` selects them here
                   # on purpose. It also APPENDS to the scratch store every run — the store
-                  # is append-only (F6), which is why F12's two visual states are named in
-                  # DATA_DEPENDENT (§4.3) rather than photographed.
+                  # is append-only (F6), which is why F12's visual state is photographed
+                  # against the DEMO store and never this one (§4.3, bead dq-vix).
                   #
                   # set -a; . ./.env; set +a
                   # DQ_SCHEMA=dq_check uv run --no-project --with great-expectations \
@@ -174,11 +183,13 @@ uv run --no-project --with pytest --with great-expectations --with 'sqlalchemy>=
 # last run 2026-08-17 at close-out: 33 passed, 251 deselected in 104.14 s, exit 0
 # (it was 18 checks in 38 s before waves 2 and 3; the layer grew with the code it checks)
 #
-# RUN IT ALONE. This layer and `check-ui` both pin DQ_SCHEMA=dq_check and both WRITE
-# to it, and the store is append-only (F6) — so a check that counts rules before and
-# after an action is reading a number the other layer is also moving. Running the two
-# concurrently on one machine took BOTH red at close-out, with nothing wrong with
-# either: see §4.7. Bead `dq-cyi.4` (B27) owns giving them a schema each.
+# RUNNING IT ALONGSIDE `check-ui` IS SAFE, as of bead dq-cyi.4 (B27). It used to take
+# both layers red: they shared DQ_SCHEMA=dq_check, both WRITE, and the store is
+# append-only (F6), so a check counting rules before and after an action was reading a
+# number the other layer was moving. They have a schema each now — this layer writes
+# `dq_check_ge` — derived from the markers pytest selected rather than exported by a
+# target, so it cannot be got wrong by a shell or a .env. See §4.7.2 for both failures,
+# both guards, and the concurrent run that is green. `make reset-scratch` drops them.
 ```
 
 `--with pytest` and `--no-project` are both load-bearing: uv's ephemeral env does not inherit
@@ -489,13 +500,13 @@ and serves the same 21 green.
 
 ### 4.3 Visual regression
 
-**Seven** named states, screenshotted and diffed against `tests/e2e/__baselines__/<state>.png`.
-Deliberately narrow: seven, not every screen at every breakpoint — each baseline is a maintenance
-cost and has to earn itself. `run-record-in-flight` earns its place because a half-finished
-progressive run is the state most likely to look plausible and be wrong.
+**Six** named states, screenshotted and diffed against `tests/e2e/__baselines__/<state>.png`.
+Deliberately narrow: six, not every screen at every breakpoint — each baseline is a maintenance
+cost and has to earn itself.
 
-**It was eight until the craft pass, and the eighth earned nothing.** `tables-bucket-two-errored`
-and `tables-three-buckets` both mapped to `/tables`, and `_settled()` only navigates — so the two
+**It was eight, and two were deleted rather than approved, for the same reason. Here is the
+first; the second is below, and it is the more instructive one because it recurred after this
+was fixed once.** `tables-bucket-two-errored` and `tables-three-buckets` both mapped to `/tables`, and `_settled()` only navigates — so the two
 states were the same full-page photograph by construction, and the two written PNGs were
 byte-identical (md5 `251d2012bccdbdc52ebb0341b5fbbd54`, on two independent runs). A baseline that
 cannot fail while its neighbour passes asserts nothing its neighbour does not, and approving both
@@ -514,74 +525,125 @@ is noise in a place whose whole value is that green means green.
 
 **A BASELINE IS NEVER SELF-APPROVED, AND THAT IS A MECHANISM, NOT A CONVENTION.** The first time a
 state renders something real the check writes the PNG and PENDS — and it *keeps* pending until the
-file is **tracked by git**, because a person staging a file is the only signal available that a
-person looked at it. Without that gate the run would photograph whatever it rendered and pass
-against its own photograph from the next run on: a green check over an image nobody has ever seen,
-which is exactly the failure §10 exists to prevent. Writing is automatic; approving is a human act
-with a name on it. A checkout with no git answers "not approved" and the state keeps pending,
-which is the right way round — the unapproved case must never be the silent one.
+file is **tracked by git and unmodified since**, because a person staging a file is the only signal
+available that a person looked at it. Without that gate the run would photograph whatever it
+rendered and pass against its own photograph from the next run on: a green check over an image
+nobody has ever seen, which is exactly the failure §10 exists to prevent. Writing is automatic;
+approving is a human act with a name on it. A checkout with no git answers "not approved" and the
+state keeps pending, which is the right way round — the unapproved case must never be the silent one.
 
-**The states that still pend do so for reasons the check reads off the running app**, and it
-names which:
+**AND IT HAD A SECOND DOOR, WHICH WAS FOUND BY WALKING THROUGH IT — bead `dq-zyt`.** The mechanism
+above was implemented as one question, `git ls-files --error-unmatch <baseline>`, i.e. *is this PATH
+tracked*. That is the whole story the first time a state is photographed and stops being the whole
+story the moment the screen changes: the check itself overwrites the baseline, and overwriting an
+already-tracked path leaves it tracked. So a re-shot baseline compared against **itself** and went
+green over a picture nobody had looked at — the exact habit the paragraph above says it exists to
+prevent, arriving through the door nobody had checked.
 
-- ~~the ones whose route still renders `web/app/unbuilt.tsx`~~ — **gone, with the component.**
-  Every route renders a real screen now, so nothing pends for being unbuilt and the placeholder
-  guard that read for it was deleted along with `web/app/unbuilt.tsx` itself, which had no callers
-  left. What replaced it as the commonest reason to pend is the one below, repeated.
-- **`tables-three-buckets` and `review-queue-with-caveat`, as of the craft pass** — and both were
-  named for the same reason the F12 states were, arrived at the same way: the screen was built, the
-  shot was taken, and the picture turned out to be of a **database**. Every F10 row states how many
-  accepted rules a table has and this layer accepts rules; the middle bucket's row prints the
-  **record id** of a record `conftest.coverage_records` mints fresh every session, as link text.
-  The review queue was worse — the written PNG was 1280×12430 and 1.3 MB, thirty-eight cards, most
-  of them the same rule duplicated by earlier runs into an append-only store (F6) that this very
-  layer writes to. Both would have gone red on the next run of the target that produced them.
-- `rule-permalink-standalone` because **its content is not a function of the code alone**. The
-  permalink renders whichever rule the store hands over first, so the screenshot would be a picture
-  of a *rule* rather than of a *screen*, and would go red the next time anybody proposed a rule
-  with a lower id. It needs a fixed demo rule, which bead `dq-cyi.2` (B23) needs for its own
-  reasons. Named in `DATA_DEPENDENT` rather than skipped quietly.
-- **`rules-facing-panes` and `rules-proposal-needs-review-held`, as of B20 (`dq-rbf.4`)** — and
-  the first of the two was renamed by that bead, from `rules-catalog-collapsed`. The old name came
-  from F12's original *"collapsed by default"* clause, which SPEC Rev 0.4 replaced with facing
-  pages; a baseline named for a disclosure control that no longer exists is a photograph of
-  something else. Still eight states. Both now pend as `DATA_DEPENDENT`, for a reason the screen
-  made visible only once it was built: **the desk renders every rule the table has, and this layer
-  writes rules.** `tests/fixtures_f12.py::held_rule` creates one when none is held, and
-  `test_draft_compile_does_not_persist_until_accept` saves one on every run *by design* — that is
-  the assertion. The store is append-only (F6), so neither can clean up after itself, and the
-  screen therefore differs between sessions in a way that is **supposed** to differ. Above them
-  sits a list of machine proposals whose wording is not a function of the code at all. Both clear
-  with B23's fixed demo data, alongside the permalink and the run record.
-- `run-record-in-flight` **for the same reason, doubled**, as of B16 (`dq-klv.4`) — the screen
-  behind it is built, and that is what made the problem visible. A run record's *id* and the moment
-  it *finished* are on the screen, and both are minted by the run that wrote it: records are
-  immutable, so the fixture executes a new run each session and every screenshot differs from the
-  last in two places that are *supposed* to differ. The mid-flight state is worse still — which
-  rules have settled depends on how far a real 17 s run had got when the shutter opened. A baseline
-  here would go red on every run and teach people to re-approve without looking, which is the one
-  habit this check exists to prevent. It clears with B23's fixed demo record, alongside the
-  permalink. **This is the state the honest answer moved on: the screen exists and is checked
-  behaviourally in `tests/e2e/test_f13_results_dashboard.py`; what it does not yet have is a
-  photograph anybody could compare it to.**
+It is not hypothetical and it is not a story about somebody else. It happened here, on 2026-08-17,
+while re-shooting `role-door.png` for the door polish (bead `dq-dkq`). The committed picture is md5
+`d81dd5bab5f32f7f6a5df6088b03fd48`; the re-shot one is `1bb3f3224d34c4fd435b2f07f28e8b36`; they
+differ by **31.36% of their pixels against a 0.20% budget** — 156x over, i.e. the loudest red this
+check can produce. The check called it approved and passed. Two things follow, and the second is the
+one worth keeping:
 
-That leaves **`role-door` as the one state with a written baseline** — the only screen here whose
-pixels are a function of the code alone — and it is written and **unapproved**: `make check-ui`
-prints
+1. **The fix is one line and the same tool.** `_approved()` now asks `git diff --quiet -- <baseline>`
+   as well, i.e. *is the CONTENT the staged content*. A tracked-but-modified baseline pends with the
+   same sentence the untracked case gets, and a re-approval costs a person the same look the first
+   approval did. The failure message no longer reads like an instruction to walk through the door
+   either — "replace the baseline with it and `git add` that as the approval" is now true, because a
+   replaced baseline PENDS until somebody does.
+2. **The 31.36% is the evidence, not the embarrassment.** Before this, the strongest thing that could
+   be said about the visual layer was that a synthetic 60x60 block moved 0.404% of a picture. What
+   actually happened is that a real, intended layout change moved a third of the screen and the diff
+   caught it exactly. The check discriminates. What failed was the approval gate around it.
 
-```
-PENDING — role-door — baseline WRITTEN to tests/e2e/__baselines__/role-door.png and NOT approved.
-Open it, decide whether that is the screen you meant, and `git add` it: being committed is what
-approval means here, and this check compares nothing until a person has done that.
-```
+   Re-derived 2026-08-18 with the check's own three expressions, against
+   `git show HEAD:tests/e2e/__baselines__/role-door.png` and the working tree:
+   `sizes (1280, 720) (1280, 720)` · `moved 289019 px = 31.36%`. The re-shot PNG is also
+   byte-stable across every run since — same md5 `1bb3f322…` after the pend path rewrites it —
+   so the 31.36% is a property of the change, not of the renderer.
+
+**WHAT THE FIVE DATA-DEPENDENT STATES PENDED FOR, AND WHY THEY DO NOT ANY MORE — bead `dq-vix`.**
+Every one of them
+said the same thing in a different dress: *the screen behind it is built and green behaviourally,
+and what it RENDERS is not a function of the code alone.* `tables-three-buckets` printed a rule
+count this layer moves and a record id a fixture mints per session. `review-queue-with-caveat` was
+the loudest — 1280x12430, 1.3 MB, thirty-eight cards, most of them the same rule left by earlier
+runs into an append-only store (F6) **that this very layer writes to**; the queue's own time-budget
+indicator honestly read *"about 16 minutes left — past the five minutes this is supposed to take"*.
+`rule-permalink-standalone` photographed whichever rule the store handed over first.
+`rules-facing-panes` photographed a desk that `fixtures_f12.held_rule` and
+`test_draft_compile_does_not_persist_until_accept` add a rule to on every run, by design.
+`run-record-in-flight` photographed a record id and a finish time minted by the run that wrote it.
+
+**The fix is not a tolerance, a mask or a crop — it is a different database.** The photographs are
+now taken against the DEMO store `dq`:
+
+- **`seed/seed_demo_rules.py`** seeds it, in one idempotent command (`make demo-fixture`). Eight
+  rules over three tables, one per STORED state these screens render:
+  accepted-and-passing, accepted-and-failing (D1 and D6 from `seed/MANIFEST.md`, 150 rows each),
+  one `needs_review` — SPEC §7 step 3's flagged rule verbatim, the vocabulary of `orders.status` —
+  one `rejected` **carrying its reason**, and one reading that is `errored` rather than failed,
+  which is the distinction LT-1a bought and which nothing could show without an instance.
+  `payments` deliberately gets nothing, because a table nobody has written a rule for is F10's
+  first bucket. **Every rule walks `store.propose()` and therefore the validator (INV-2)** — a
+  fixture that INSERTed would be the one back door the keystone invariant exists to close.
+- **Idempotent against a store that cannot be edited.** Both tables refuse UPDATE, DELETE and
+  TRUNCATE by trigger, from every role including the owner, so "run it twice, get the same store"
+  is done by asking per rule whether the store already holds that exact validated spec and
+  appending only what is missing — and by keeping the run records a table already has, because a
+  record is immutable and a second one would move every id on screen. Proven: two consecutive runs
+  of the seeder, the second printing `held` on all ten lines and writing nothing.
+- **`tests/fixtures_demo.py`** boots the product on it — its own Python and Next processes on free
+  ports, the same machinery SPEC §7 uses (`scenario_stack`, which grew two arguments for this).
+  The one difference is the whole point: `reset=False`, because §7 needs a store nobody has written
+  to *yet* and this needs one nobody will write to *again*. **Every navigation these states make is a
+  GET.** Measured across three runs of the browser layer on 2026-08-17: `dq_check` went from 261
+  rules / 253 records to **267 / 261**, while `dq` stayed at **16 rows and 2 records** with its
+  last write still the seeder's.
+
+**Result, measured 2026-08-17 across three independent runs — two of `pytest -m e2e -k visual`
+and one of the whole browser layer: every baseline came out BYTE-IDENTICAL** (same md5, three times
+over) — a stronger property than the 0.2% budget the check enforces. Zero states now skip for data
+dependence, and all six pend with the one sentence that was always the honest one: *the baseline
+was WRITTEN and is NOT approved.*
+
+**THE DUPLICATE-PHOTOGRAPH DEFECT RECURRED, AND WAS SETTLED THE WAY THE FIRST ONE WAS.**
+`rules-facing-panes` and `rules-proposal-needs-review-held` mapped to the same route and `_settled()`
+only navigates, so they were the same photograph — md5 `ed9a0d4cef028e8996b5aedf8cc9ffcf`, on all
+three runs. That is verbatim the case the eighth state was deleted for, above, recurring after being
+fixed once, which is a better piece of evidence than the clean version would have been. This
+document's first draft named it and deferred it to a human. It is now **deleted**, on the argument
+the eighth state already established and on one more that is specific to it: the state could not
+render what it is named for at all. A proposal is a model call (F3) and is unsaved by definition
+(F4), so the demo fixture cannot mint one — the pane in the shipped PNG read *"Accept 0 — I vouch
+for each of these · 0 / 8"* over an empty list. Giving it a step that produced a real proposal was
+the alternative and was refused: a billed, non-deterministic call is the one thing a photograph may
+not depend on. The proposal pane is checked where it is real, in
+`tests/e2e/test_f12_translation_desk.py`. **Handing a person two identical PNGs to sign was the
+thing to avoid, and asking them to settle it counts as handing.**
+
+**One thing a person still has to settle.** `run-record-in-flight` is now a photograph of a
+*settled* record, because a fixed record is by definition one that finished — the name outlived what
+it names. Renaming a baseline is a scope decision with a human's name on it, and unlike the
+duplicate above it costs nothing to leave standing: the state asserts exactly what it should, under
+a name that reads wrong.
 
 **The diff was proven to go both ways on 2026-08-17**, against the real `role-door.png` at
 1280×720: an identical image moves 0 pixels (green); a 20×20 black block moves 441 pixels, 0.048%
 (green, under budget); a 60×60 block moves 3,721 pixels, 0.404% (**red**, over the 0.2% budget).
 Same three expressions the check runs.
 
+**And on 2026-08-17 it ran for real — against a picture nobody had staged.** `role-door` compared
+and passed inside the browser layer, which is the first actual comparison this harness has ever
+made, and it should not have happened: the baseline it compared against was one the check had
+written over a tracked path minutes earlier. That is bead `dq-zyt` and it is told in full above.
+What survives is the measurement — 31.36% of the screen moved and the diff reported 31.36% — and
+what is fixed is the gate around it.
+
 **Why the earlier implementation was deleted, and what changed.** A first Pillow version was
-exercised end to end on 2026-08-16 and then removed on two grounds. With all eight states pending,
+exercised end to end on 2026-08-16 and then removed on two grounds. With every state pending,
 every line of it sat after a `pending()` that always fires — code `make check-ui` could not reach,
 so the gate could not keep it honest. And its `from PIL import …` was a module-level import in a
 file pytest collects during **`make check`** (deselection happens after collection), which made
@@ -709,8 +771,59 @@ reading a number a second process is also moving.
 **The F12 check is right and its sentence is right**, which is the part worth being clear about: *"a
 stored non-rule reports coverage the table does not have"* is exactly the assertion that has to stay
 exact, and making it tolerant of a moving count would delete the check while leaving it green. What
-was wrong was running two writers into one append-only schema at once. **Until `dq-cyi.4` gives the
-two layers a schema each, run them one at a time** — the `Makefile` says so at `check-ge`.
+was wrong was running two writers into one append-only schema at once.
+
+**Fixed by `dq-cyi.4`, and neither assertion was touched.** The two layers now have a scratch schema
+each — `dq_check_ge` for the GE layer, `dq_check` for the browser layer and the API process it
+drives — and the name is derived from the MARKERS pytest selected rather than exported by a target,
+so it is not a value a shell, a `.env` or a copied command line can get wrong (`tests/scratch.py`).
+Neither layer writes to the demo store `dq` and the derivation refuses to be pointed there.
+
+**Two guards, because there are two ways into the wrong schema and neither may be silent:**
+
+- **One process is one schema.** `pytest_collection_modifyitems` refuses a run that selected both
+  layers, before it writes a row. Bare `pytest` (which collects everything) now exits 4 with
+  `ERROR: this run collected the e2e and ge layers together, and they write to different scratch
+  schemas (dq_check, dq_check_ge)` rather than half-running a browser layer into the GE layer's
+  store.
+- **The browser layer is two processes on one store.** Its writes are split between pytest
+  (`conftest.coverage_records`) and an API process a person starts by hand, and only a matching
+  `DQ_SCHEMA` makes those the same store — so the fixture asks the server for a run record it has
+  just written and fails by name if the server cannot see it (`scratch.agrees`). Without that, a
+  server on the wrong schema is not an error anywhere: it is F10's middle bucket coming up empty
+  and a check blaming the product. **Shown to go red**, by starting a second API process on
+  `DQ_SCHEMA=dq_check_ge` and pointing one F10 check at it:
+
+  > `Failed: the API process on http://localhost:8123 cannot see run record
+  > 319d19e5-92ad-4096-8b20-2000503001b6, which this process just wrote to dq_check (HTTP Error
+  > 404: Not Found), so the two are on different schemas. Start it with DQ_SCHEMA=dq_check …`
+
+**Shown, not asserted — the two targets run at the same time on one machine, both green:**
+
+```
+# 2026-08-18 08:50:29 IST — all three targets launched from one shell, at once, on one machine
+make check      187 passed, 96 deselected, 1 warning in 2.88s                        CHECK_RC=0
+make check-ge    33 passed, 250 deselected, 1 warning in 103.64s (0:01:43)              GE_RC=0
+make check-ui    52 passed, 8 skipped, 223 deselected, 1 warning in 368.17s (0:06:08)   UI_RC=0
+```
+
+The 2026-08-17 measurement, kept because it is the one the bead closed on: `check-ge` 33 passed in
+104.35 s, `check-ui` 53 passed / 8 skipped in 382.15 s. The pass count moved from 53 to 52 because
+one visual state was deleted for being a duplicate photograph (§4.3) and another stopped
+self-approving (`dq-zyt`) — the skip count is unchanged at eight because those two cancel.
+
+Those are the same numbers each target posts alone, and the eight skips are the two unnamed delivery
+targets and the six unapproved visual baselines — none of them new. The GE run is also the stronger case: `make
+reset-scratch ARGS=dq_check_ge` had dropped its schema minutes earlier, so it built its store from
+nothing while the browser layer was writing to `dq_check` beside it.
+
+**Resetting them.** `make reset-scratch` drops both scratch schemas; `make reset-scratch
+ARGS=dq_check_ge` drops one, which is the common case. `DROP SCHEMA … CASCADE` is the only reset an
+append-only store has, and it runs as `dq_system` — which owns these schemas because
+`app/rules/store.py` created them — so it needs the system DSN and never the owner's. Any name
+outside `tests/scratch.py` is refused, which is what makes `ARGS=dq` an error. Reset ahead of a full
+run of a layer rather than of one check: `make check-ui` rebuilds what it needs in file order, and
+`conftest.rule_id` fails on an empty store by design.
 
 ---
 
@@ -1191,7 +1304,9 @@ UI surface is checked by a browser-driven check, which is what the rule at the b
 demands. Five of six epics are closed with per-criterion evidence in their close reasons —
 `dq-5pb`, `dq-yov`, `dq-3bp`, `dq-klv`, `dq-rbf`. **What is not done is three things and they are
 named, not implied:** no deployed URL answers the smoke (`dq-cyi.1`, §8.1); **no visual baseline has
-ever been approved by a human**, so the visual layer asserts nothing yet (`dq-vix`, §4.3); and
+ever been approved by a human**, so the visual layer asserts nothing yet — and for two hours on
+2026-08-17 this document said otherwise, because a re-shot baseline had self-approved through a hole
+in `_approved()` (`dq-zyt`, §4.3); and
 duplication/unused-export detection has had its trigger fire and has not been run (§8). The
 `PENDING —` lines in a real run say all three out loud on every invocation, which is the point.
 
