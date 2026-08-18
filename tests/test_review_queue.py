@@ -349,3 +349,43 @@ def test_a_failing_decision_carries_the_atom_whole_and_the_magnitude_beside_it()
         "hides it ENTIRELY from the domain expert — this is their screen, so the framework "
         "is not in the document, not merely not on the screen."
     )
+
+
+def test_a_table_name_that_names_nothing_is_refused_before_the_queue_is_built(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SPEC §3.1, on the one route that did not run its `?table=` through the schema.
+
+    `/review?table=nope` answered **200 with a queue** while every sibling refused the
+    same name — `GET /rules?table=nope` is a 404 saying "a table name that does not
+    resolve is a hallucination as surely as a column name is", and `POST /runs/nope` is
+    a 422 with the same sentence. A made-up name coming back as an empty queue is the
+    one place in the product that agreed it was real, and an empty queue is what a
+    person reads as "nothing needs me".
+
+    BEFORE the store is read, not after, and that is the other half: resolving the name
+    afterwards would refuse correctly and still have issued the query. The unscoped call
+    resolves nothing, because there is no name to resolve — `?table=` is a filter and
+    its absence is the default (F11), not a table called None.
+    """
+    asked: list[str] = []
+
+    def resolve(table: str) -> frozenset[str]:
+        asked.append(table)
+        raise view.live.UnknownTable(f"{table!r} is not a table in the live schema.")
+
+    def unread(**_: Any) -> list[store.Revision]:
+        raise AssertionError(f"the store was read for {asked[-1]!r}, which is not a table")
+
+    monkeypatch.setattr(view.live, "columns", resolve)
+    monkeypatch.setattr(view.store, "revisions", unread)
+    with pytest.raises(view.live.UnknownTable):
+        view.queue("nope")
+    assert asked == ["nope"], f"the queue resolved {asked}, not the one name it was handed."
+
+    monkeypatch.setattr(view.store, "revisions", lambda **_: [])
+    assert view.queue()["items"] == [], "the unscoped queue is the default and names no table"
+    assert asked == ["nope"], (
+        f"the unscoped queue resolved {asked[1:]}. There is no name in it to prove real, and "
+        "a schema read for one would be a round trip to Singapore for a filter nobody applied."
+    )

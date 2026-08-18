@@ -41,6 +41,8 @@ from typing import Any
 
 import psycopg2
 
+from app.db import unreachable
+
 # Same variable app/dq/ge_runtime.py runs against, restated rather than imported:
 # importing it from there would drag the framework into a module that has to work
 # without it. `tests/test_inv2_authoring_rejection.py` pins the two together.
@@ -87,7 +89,7 @@ _PRIMARY_KEY = """
 """
 
 
-class Unavailable(RuntimeError):
+class Unavailable(unreachable.Unreachable):
     """The schema could not be read. An operator's problem, not the rule author's."""
 
 
@@ -118,7 +120,7 @@ def connect() -> Any:
     try:
         return psycopg2.connect(dsn, connect_timeout=15)
     except psycopg2.Error as exc:
-        raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
+        raise Unavailable.not_answering(DSN_VAR, exc) from exc
 
 
 @functools.cache
@@ -141,7 +143,7 @@ def column_types(table: str) -> tuple[tuple[str, str], ...]:
             cur.execute(_QUERY, (table,))
             found = tuple((row[0], row[1]) for row in cur.fetchall())
     except psycopg2.Error as exc:
-        raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
+        raise Unavailable.not_answering(DSN_VAR, exc) from exc
     if not found:
         raise UnknownTable(
             f"{table!r} is not a table in the live schema. A table name that does not resolve "
@@ -175,4 +177,4 @@ def primary_key(table: str) -> tuple[str, ...]:
             cur.execute(_PRIMARY_KEY, (table,))
             return tuple(str(row[0]) for row in cur.fetchall())
     except psycopg2.Error as exc:
-        raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
+        raise Unavailable.not_answering(DSN_VAR, exc) from exc

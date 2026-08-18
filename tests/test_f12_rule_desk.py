@@ -208,6 +208,47 @@ def test_the_desk_writes_none_of_its_own_copy() -> None:
     ), "one sentence is spliced into another; each of these has exactly one home"
 
 
+def test_the_desk_asks_the_generator_for_exactly_the_cap_it_prints() -> None:
+    """The number in the copy and the number of proposals are one constant (bead dq-5da).
+
+    THE COPY IS AN ARGUMENT, NOT A PREFERENCE. "Up to N at a time, so every evidence line
+    is on screen when you press it" is the reason a bulk control is safe at all; eight
+    fit on screen with their evidence and ten do not. The generator used to hold its own
+    constant of ten, and the live deployment answered `POST /proposals/payments` with ten
+    proposals under a control that said eight — the sentence stopped being true exactly
+    where it mattered.
+
+    ASSERTED ON THE CALL SITE rather than on a returned count, because that is where the
+    drift would come back: `desk.proposals()` needs a database to run, and a check that
+    counted its output would go green on a literal `8` typed in beside `store.BULK_CAP`.
+    The argument must be the store's attribute, so there is one number and no second
+    place to change it. `tests/test_f3_model_call.py` holds the other half — the slice
+    and the prompt honour whatever it is.
+    """
+    call = next(
+        (
+            node
+            for node in ast.walk(ast.parse((REPO / "app/rules/desk.py").read_text()))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "for_table"
+        ),
+        None,
+    )
+    assert call is not None, (
+        "app/rules/desk.py no longer calls suggest.for_table(). If the proposer moved, this "
+        "check has to move with it — the cap reaching the generator is the assertion."
+    )
+    passed = [ast.unparse(argument) for argument in call.args[1:]] + [
+        ast.unparse(keyword.value) for keyword in call.keywords
+    ]
+    assert "store.BULK_CAP" in passed, (
+        f"the desk asks the generator for {passed}, not for store.BULK_CAP. The screen prints "
+        "that number under the bulk control, so any other value here is a promise the "
+        "proposal list does not keep."
+    )
+
+
 def test_the_catalog_rail_offers_the_whole_menu_and_marks_what_is_used() -> None:
     """B6 · the rail is the catalog file, and nothing here declares how long it is.
 

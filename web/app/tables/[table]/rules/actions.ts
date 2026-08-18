@@ -28,10 +28,27 @@ import { refused, write, type Answer, type Spec } from "../../../api";
  * too big for a URL and is returned to a `useActionState` instead.
  */
 
-/** The URL a judgment on `table` returns to, with an optional complaint attached. */
-function here(table: string, complaint?: string): string {
+/**
+ * The URL a judgment on `table` returns to: an optional complaint, and whether the
+ * proposals the person was looking at are still to be there when they land.
+ *
+ * `showing` IS B31'S FIX AND IT IS ONE QUERY PARAMETER. A refusal used to return to the
+ * bare URL, so the CORRECT refusal for a reasonless rejection also took the ten unsaved
+ * proposals off the screen with it — a billed model call and half a minute charged to
+ * somebody for reading the guard's own sentence, which is exactly the tax that teaches
+ * people to route around a guard. Proposals are deliberately UNSAVED (F3: nothing is
+ * stored until a person accepts, because a stored proposal implies coverage that does
+ * not exist), so there is no store to recover them from and none is added: `?propose=1`
+ * is the same URL the screen was already on, and `app/rules/suggest.py`'s five-minute
+ * memo is what makes re-rendering it cost no second call.
+ */
+function here(table: string, complaint?: string, showing = false): string {
   const base = `/tables/${encodeURIComponent(table)}/rules`;
-  return complaint ? `${base}?refused=${encodeURIComponent(complaint)}` : base;
+  const query = [
+    showing ? "propose=1" : "",
+    complaint ? `refused=${encodeURIComponent(complaint)}` : "",
+  ].filter(Boolean);
+  return query.length > 0 ? `${base}?${query.join("&")}` : base;
 }
 
 /**
@@ -56,10 +73,22 @@ function selection(tokens: string[]): { specs: Spec[]; rule_ids: string[] } {
   return { specs, rule_ids };
 }
 
-/** One judgment on one row — a stored rule or an unsaved proposal, the same either way. */
+/**
+ * One judgment on one row — a stored rule or an unsaved proposal, the same either way.
+ *
+ * The form's `propose` field is how this action learns that proposals were on the screen
+ * when the button was pressed, and the screen is the only thing that could tell it: an
+ * unsaved proposal has no row to look the answer up in, which is F3's whole point.
+ */
 export async function judge(form: FormData): Promise<void> {
   const table = String(form.get("table"));
-  await post(table, [String(form.get("pick"))], String(form.get("status")), form.get("reason"));
+  await post(
+    table,
+    [String(form.get("pick"))],
+    String(form.get("status")),
+    form.get("reason"),
+    Boolean(form.get("propose")),
+  );
 }
 
 /**
@@ -69,14 +98,35 @@ export async function judge(form: FormData): Promise<void> {
  */
 export async function acceptSelected(form: FormData): Promise<void> {
   const table = String(form.get("table"));
-  await post(table, form.getAll("pick").map(String), String(form.get("status")), null);
+  await post(
+    table,
+    form.getAll("pick").map(String),
+    String(form.get("status")),
+    null,
+    Boolean(form.get("propose")),
+  );
 }
 
+/**
+ * `showing` SURVIVES THE SUCCESS PATH TOO, not only the refusal. Accepting one proposal
+ * used to take the other seven off the screen — the same loss B31 is about, one press
+ * later, and the one a reviewer who reads the note above will hit next. Re-listing them
+ * is safe and free: the batch is `app/rules/suggest.py`'s five-minute memo, so there is
+ * no second billed call, and `app/rules/desk.py::proposals` drops any proposal the table
+ * now holds by COMPILED spec — so the one just accepted is gone from the list because it
+ * is in the store, which is the honest reason for it to disappear.
+ *
+ * ponytail: the draft's Save button still returns to the bare URL. Ceiling: a refused
+ * draft on a screen that also had proposals on it still costs them — but that control
+ * writes through `translate`, which returns its refusal to a `useActionState` and never
+ * navigates at all, so the loss is a redirect it does not make.
+ */
 async function post(
   table: string,
   picks: string[],
   status: string,
   reason: FormDataEntryValue | null,
+  showing = false,
 ): Promise<never> {
   const answer = await write("/rules", {
     table,
@@ -85,10 +135,10 @@ async function post(
     reason: reason === null ? null : String(reason),
   });
   if (refused(answer)) {
-    redirect(here(table, answer.refused));
+    redirect(here(table, answer.refused, showing));
   }
-  revalidatePath(here(table));
-  redirect(here(table));
+  revalidatePath(here(table, undefined, showing));
+  redirect(here(table, undefined, showing));
 }
 
 /**
@@ -103,7 +153,7 @@ async function post(
  */
 export async function propose(form: FormData): Promise<void> {
   const table = String(form.get("table"));
-  redirect(`${here(table)}?propose=1`);
+  redirect(here(table, undefined, true));
 }
 
 /**
@@ -124,10 +174,10 @@ export async function translate(
   if (!request) {
     return null;
   }
-  const answer = await write<Answer>(
-    `/drafts/${encodeURIComponent(table)}${form.get("configuration") ? "?configuration=1" : ""}`,
-    { request },
-  );
+  // No configuration flag on this path, and no hidden field asking for one. A form field
+  // is a thing the BROWSER sends, so the reader who may see the framework would have been
+  // decided by the client — the door decides instead (`web/app/api.ts`, bead dq-220).
+  const answer = await write<Answer>(`/drafts/${encodeURIComponent(table)}`, { request });
   return refused(answer) ? { refused: answer.refused } : answer;
 }
 
@@ -143,27 +193,32 @@ export async function translate(
 export async function revise(form: FormData): Promise<void> {
   const table = String(form.get("table"));
   const ruleId = String(form.get("ruleId"));
+  // The same field `judge` reads, for the same reason: all three of this action's
+  // refusals are correct and all three used to land on a screen with the proposals
+  // gone, which is B31 one control sideways. An amendment is the likeliest of the four
+  // to be refused, because it is the only one where somebody types the configuration.
+  const showing = Boolean(form.get("propose"));
   const configuration = form.get("configuration");
   let body: Record<string, unknown>;
   if (typeof configuration === "string" && configuration.trim()) {
     try {
       body = JSON.parse(configuration) as Record<string, unknown>;
     } catch (error) {
-      redirect(here(table, `that is not valid JSON, so nothing was saved: ${error}`));
+      redirect(here(table, `that is not valid JSON, so nothing was saved: ${error}`, showing));
     }
   } else {
     body = { statement: String(form.get("statement") ?? "") };
   }
   const answer = await write(`/rules/${encodeURIComponent(ruleId)}/revision`, body);
   if (refused(answer)) {
-    redirect(here(table, answer.refused));
+    redirect(here(table, answer.refused, showing));
   }
   // A refusal from the authoring path is a 200 carrying `refusal`, not an HTTP error —
   // it is the product working, and it has to reach the person who pressed the button.
   const refusal = (answer as Answer).refusal;
   if (refusal) {
-    redirect(here(table, refusal.message));
+    redirect(here(table, refusal.message, showing));
   }
-  revalidatePath(here(table));
-  redirect(here(table));
+  revalidatePath(here(table, undefined, showing));
+  redirect(here(table, undefined, showing));
 }

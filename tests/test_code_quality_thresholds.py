@@ -76,13 +76,30 @@ def test_no_source_file_exceeds_the_size_threshold() -> None:
     straight past the only signal that catches it — eslint has no file-size rule
     either.
 
+    BOTH SUFFIXES, AND THE SECOND ONE IS THE BUG THIS HAD. The glob was `*.tsx` alone,
+    so no `.ts` file was ever measured — and the largest file under `web/` is not a
+    component: `web/app/api.ts` reached **451 lines** while this check reported green,
+    because the docstring's claim ("covers the TypeScript side") was carried by a glob
+    that happened to cover the files anybody had looked at. The same class of gap as the
+    one `test_inv3_single_ge_import.py` closed by walking the filesystem instead of a
+    list. `next-env.d.ts` is Next's generated stub and is dropped by name, the same way
+    `tests/test_f12_framework_boundary.py` drops it.
+
     The root is `web` and not `web/app`: the route tree holds no node_modules, which
     is an argument for excluding the generated directories rather than for a narrower
     root — a component moved one directory sideways would leave this scan silently.
     Same change, same reason, as `tests/test_inv5_sampling_disclosure.py`'s."""
-    files = source_files("app", "tests") + [
-        p for p in (REPO / "web").rglob("*.tsx") if not {"node_modules", ".next"} & set(p.parts)
+    web = [
+        p
+        for suffix in ("*.ts", "*.tsx")
+        for p in (REPO / "web").rglob(suffix)
+        if not {"node_modules", ".next"} & set(p.parts) and p.name != "next-env.d.ts"
     ]
+    assert any(p.suffix == ".ts" for p in web), (
+        "the web scan collected no .ts file at all, which is the state this check shipped "
+        "in — a glob that lost half its subject reports the same green as a clean tree."
+    )
+    files = source_files("app", "tests") + web
     oversized = [
         (p.relative_to(REPO), n)
         for p in files

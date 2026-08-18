@@ -46,11 +46,13 @@ export function Selection({
   table,
   cap,
   copy,
+  proposing,
   children,
 }: {
   table: string;
   cap: number;
   copy: Workbench["copy"];
+  proposing: boolean;
   children: React.ReactNode;
 }) {
   const [picked, setPicked] = useState<string[]>([]);
@@ -72,6 +74,10 @@ export function Selection({
           fifteen years; the React answer would have been to lift the rows. */}
       <form id="bulk" action={acceptSelected}>
         <input type="hidden" name="table" value={table} />
+        {/* The same field every row's own form carries, for the same reason (B31): this
+            control can be refused too — by the validator, on a spec that was edited on
+            its way back — and a refusal must not cost the reader the other proposals. */}
+        {proposing ? <input type="hidden" name="propose" value="1" /> : null}
       </form>
       <Context.Provider value={{ picked, toggle }}>{children}</Context.Provider>
       <div className="bulk-foot">
@@ -134,12 +140,10 @@ export function Pick({ token, label }: { token: string; label: string }) {
 export function AuthorField({
   table,
   copy,
-  configuration,
   judge,
 }: {
   table: string;
   copy: Workbench["copy"];
-  configuration: boolean;
   judge: (form: FormData) => void | Promise<void>;
 }) {
   const [answer, act, pending] = useActionState<Answer | { refused: string } | null, FormData>(
@@ -156,7 +160,6 @@ export function AuthorField({
       </div>
       <form className="nl-input-row" action={act}>
         <input type="hidden" name="table" value={table} />
-        {configuration ? <input type="hidden" name="configuration" value="1" /> : null}
         <input
           type="text"
           name="request"

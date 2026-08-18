@@ -100,6 +100,32 @@ def test_table_with_no_rules_reports_zero_and_is_not_omitted() -> None:
     )
 
 
+def test_a_learning_tests_scratch_table_is_not_offered_as_coverage() -> None:
+    """`lt1a_probe` is a landed test's evidence, not data anybody is being asked to vouch for.
+
+    It reached the deployed demo's coverage list as a 100-row table an engineer was
+    invited to care about (bead dq-5da). The demo dataset is a deliberate artefact
+    (`seed/MANIFEST.md`, SPEC F15), and a probe wandering into it makes it read as
+    somebody's scratch database. Dropping the table belongs to the learning test that
+    owns it; the front door's view of it belongs here.
+
+    ASSERTED FROM BOTH SIDES, because a rule that hides the probe by hiding part of the
+    schema is worse than the defect it fixes. `lt` must be followed by a digit, so a
+    business table whose name merely starts with those two letters is untouched — and
+    nothing but the schema read decides the rest.
+    """
+    for probe in ("lt1a_probe", "lt1a_ge_probe", "lt2b_sample"):
+        assert not tables.listed(probe), (
+            f"{probe} is offered on the coverage screen. A learning test's scratch table is "
+            "not data under analysis, and F1's list is what an engineer is asked to act on."
+        )
+    for real in (TABLE, OTHER, "payments", "ltv_by_cohort", "alt1_ledger", "lt_shipments"):
+        assert tables.listed(real), (
+            f"{real} was dropped from the listing. The exclusion is learning-test names — "
+            "`lt` and a digit — and every other table in the schema is the engineer's to see."
+        )
+
+
 def test_row_count_is_approximate_not_a_full_scan() -> None:
     """The size number is the planner's estimate, and the query proves it.
 
@@ -143,9 +169,11 @@ def test_seeded_schema_lists_orders_customers_and_payments_with_types_and_accept
     """
     before = {table.name: table for table in tables.tables()}
 
-    assert {TABLE, OTHER, "payments"} <= set(before), (
+    assert set(before) == {TABLE, OTHER, "payments"}, (
         f"the seeded schema listed {sorted(before)}; seed/MANIFEST.md loaded orders, customers "
-        "and payments."
+        "and payments, and the demo's front door offers those three and nothing else. This is "
+        "an equality rather than a subset because the subset is what let `lt1a_probe` — a "
+        "learning test's 100-row leftover — onto the deployed coverage screen (bead dq-5da)."
     )
     assert before[TABLE].columns["order_total"] == "numeric(10,2)", (
         f"order_total came back as {before[TABLE].columns['order_total']!r}. The type is the "

@@ -7,28 +7,54 @@ launches Chromium against a real Next process in front of a real Python process 
 seeded Supabase database, with console, network and axe recorders attached before first paint, and
 it has been made to go red on a planted break or a dead endpoint on **five recorded occasions** and
 restored every time — §4.2, §4.6 twice, §4.7 and §8.1.
-**Runs today** (all three targets re-measured 2026-08-18 at 08:50, launched concurrently — §4.7.2
-has the block): `make check` exits 0 with **187 passed, 0 skipped** in 2.88 s (96 deselected — the
-browser, GE and billed-model layers, which belong below). The markers cover all **283** collected
-checks: 187 default + 33 `ge` + 60 `e2e` + 6 `live`. **They stopped being a partition with F12**
+**Runs today** (re-measured 2026-08-18 at close-out, after the four live-deployment defects — the
+concurrent three-target block from 08:50 is at §4.7.2): `make check` exits 0 with
+**201 passed, 0 skipped** in 5.79 s (103 deselected — the browser, GE and billed-model layers, which
+belong below). The markers cover all **304** collected
+checks: 201 default + 33 `ge` + 67 `e2e` + 6 `live` (201+33+67+6−3 = 304, and the arithmetic is
+worth keeping visible: it is what catches a check that joined no layer). **They stopped being a partition with F12**
 and the overlap is deliberate and exactly three: `tests/e2e/test_f12_translation_desk.py`'s two authoring checks carry `e2e` AND
 `live`, because F4's refusal and its unsaved-until-accepted promise need a browser *and* a real
 model call — and SPEC §7's scenario carries both for the same reason, three times over.
 `make check` excludes them twice over; `make check-ui` selects them on purpose, which is what
 makes it the one make target that spends money (about $0.24 a run).
 **`make check-ge` runs the GE layer against the real seeded database — 0 `PENDING`, no stubs
-left.** INV-2's authoring gate (`app/rules/validator.py`, bead `dq-yov.4`) is what turned 16 of
+left**, and it is **33 passed, 269 deselected, 199.79 s, exit 0** at close-out. INV-2's authoring
+gate (`app/rules/validator.py`, bead `dq-yov.4`) is what turned 16 of
 those skips into assertions: every shipped invalid-rule probe is now refused before persistence —
 all 10 the framework alone accepts, plus one probe for each of the four rejection classes it does
 catch.
-**`make check-ui` runs the browser layer against the two booted processes: 52 passed, 8 skipped,
-223 deselected, 368.17 s**, exit 0.
-The eight skips are the two delivery targets nobody named and the six visual states whose
-baselines are **written and awaiting a human's eye** — none of them for data dependence any
-more, which is what `dq-vix` bought. 21 of them are 3 hygiene checks over
+**That target was BROKEN at close-out and the fix is one `--with`.** It died with
+`ModuleNotFoundError: No module named 'claude_agent_sdk'` and `Interrupted: 7 errors during
+collection` in 0.76 s — a red target that had verified nothing, which is the failure mode this
+document exists to refuse. `-m ge` selects 33 checks and none of them asks a model, but **pytest
+imports every module under `testpaths` before it applies a marker**, and seven of them reach
+`app/model.py` through `suggest` / `authoring` / `app.api.server`. `--no-project` inherits no
+site-packages, so the recipe now names `claude-agent-sdk==0.1.23` the same way §1's API-process line
+already does. A layer's dependency list is not "what it runs", it is "what it can import".
+**`make check-ui` runs the browser layer against the two booted processes.** Last run
+2026-08-18 at close-out, on a freshly rebuilt `web/.next`: **63 passed, 2 skipped, 2 failed, 237
+deselected, 525.11 s**. The two skips are the delivery targets nobody named. The two failures are
+visual-regression states and neither is a code change: `tables-three-buckets` no longer carries
+`lt1a_probe`, which is this wave's own fix landing in a picture taken before it, and
+`run-record-in-flight` photographs a demo run record that has since been re-seeded (new id, new
+timestamp, and the two failing rules now sort together). Both need the author's eye and a
+`git add`, which is the one approval no agent may give — §4.3 and §9. 21 of the passes are 3 hygiene checks over
 7 routes (console-clean, layout stability and accessibility, §4.2/§4.4/§4.5); the rest are F10's,
 F11's, F12's, F13's and F14's own screens, plus **SPEC §7's end-to-end scenario, which is one check
-and about 2 min 23 s of it** (bead `dq-cyi.2` — see §4.6).
+and about 2 min 50 s of it** (bead `dq-cyi.2` — see §4.6).
+
+**TWO THINGS THAT MAKE A BROWSER-LAYER NUMBER A LIE, both met at close-out and both cheap to
+avoid.** First, **`web/.next` is stale until you rebuild it and it fails GREEN**: `npm run start`
+serves the last build and says nothing about it, so a whole `-m e2e` pass was taken against code
+that predated the fixes it was checking, and it passed. `find web/app -newer web/.next/BUILD_ID`
+answers it in one line, and it also dissolved a phantom defect the stale build had invented.
+Second, **two concurrent runs of this layer take each other red**: SPEC §7's stack schema is the
+constant `dq_scenario` and the flow DROPS it on the way in, so a second runner drops it under the
+first. Seen as `AssertionError: the store holds 3 rule(s) for orders after a screen of proposals` —
+an assertion that is exactly right and was not loosened — against a `dq_scenario` holding 19 rule
+revisions written by the other process inside the same 100 seconds. §7 alone: **1 passed in
+170.18 s**. Bead `dq-mc0`, open; it is the third instance of the shape §4.7.2 records.
 
 **THE EIGHT SKIPS, AND THE STATUS OF THE VISUAL BASELINES, STATED ONCE.** Six of the eight are
 visual-regression states (§4.3) and two are the delivery targets nobody named (§8.1). **No visual
@@ -157,7 +183,13 @@ make check-ui     # APP_URL=http://localhost:3000  DQ_API_URL=http://localhost:8
                   #
                   # set -a; . ./.env; set +a
                   # DQ_SCHEMA=dq_check uv run --no-project --with great-expectations \
-                  #   --with 'sqlalchemy>=2' --with psycopg2-binary python3 -m app.api.server
+                  #   --with 'sqlalchemy>=2' --with psycopg2-binary \
+                  #   --with claude-agent-sdk==0.1.23 python3 -m app.api.server
+                  #   ^ the fourth --with is load-bearing: --no-project inherits no
+                  #     site-packages and app/api/server.py reaches app/model.py through
+                  #     desk -> authoring, so without it the process dies on import
+                  #     before it binds a socket. tests/e2e/scenario_stack.py carries the
+                  #     same line for the seven checks that boot their own stack.
                   # DQ_API_URL=http://localhost:8000 npm --prefix web run start
                   # last run 2026-08-17: 43 passed, 15 skipped, 216 deselected in 167.5 s
 
@@ -351,6 +383,20 @@ map the browser checks assert against:
 **Role is never a route segment.** No `/eng/tables`, or every F14 permalink forks in two. Role is
 cookie view state layered on one URL space. This is asserted, not documented.
 
+**And whether a document contains the framework is decided in ONE place, which is bead `dq-220`.**
+It used to be decided on each page — three of them appended `?configuration=1` for the engineer,
+and the two `/runs` screens, written later, did not: both roles received byte-identical HTML with
+nine expectation configurations in it, folded into a `<details>`, which is exactly the disclosure
+pattern Rev 0.4 replaced. The decision now lives in `web/app/api.ts`, the one door every screen
+reads through, and it is enforced from two sides: `tests/test_f12_framework_boundary.py` (default
+layer, offline) fails on any file under `web/` that knows the API's address or composes the
+parameter itself, and `tests/e2e/test_framework_absence.py` derives the route list from
+`web/app/**/page.tsx` and fetches every page as both readers, asserting on the RAW RESPONSE that
+the domain expert's carries none of the framework's vocabulary. A page added later joins that check
+by existing rather than by somebody remembering; a page with a segment it cannot fill goes red
+naming it. The run stream is checked the same way, from one real run read twice — the expert's
+NDJSON must be clean while the record that run stored must not be, or the check has proved nothing.
+
 **Built with F14 (bead `dq-rbf.1`), and this is what the mechanism turned out to be.** The role is
 a **cookie**, not localStorage, and the reason is a property of this stack rather than a
 preference: the role decides what the SERVER renders — the Great Expectations pane is not hidden
@@ -404,8 +450,12 @@ verified*. A table whose last record is errored or sampled is a descendant of bu
 **not** of bucket III. Zero-coverage tables sort first (SPEC F10).
 
 **F12** — the catalog renders exactly as many entries as the canonical catalog **file** contains
-(counted against the file, not a hardcoded 15). The GE-config `<details>` has **no `open`
-attribute** on first paint — attribute presence is deterministic, "looks collapsed" is not. A
+(counted against the file, not a hardcoded 15). The GE configuration is a facing pane and there is
+no disclosure control on that screen at all, which is Rev 0.4 (the check asserts
+`query_selector_all("details") == []` for the engineer, and no `ge-pane` and no `expect_column_values`
+anywhere in the domain expert's document). The raw panel that IS a `<details>` is F13's, on the run
+record, and it belongs to the engineer — asserted on the absence of the `open` attribute, because
+attribute presence is deterministic and "looks collapsed" is not. A
 `needs_review` row contains **no `input[type=checkbox]` at all**, not a disabled one: a disabled
 control still says *this is bulk-acceptable, just not right now*. Bulk cap: 0 selected → button
 `disabled`; cap+1 selected → the extra is refused and the label still reads the cap. The

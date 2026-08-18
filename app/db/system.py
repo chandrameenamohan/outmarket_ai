@@ -43,6 +43,8 @@ from typing import Any
 
 import psycopg2
 
+from app.db import unreachable
+
 # The write-capable role, and the ONLY module that names it (SPEC §3.1,
 # app/db/roles.sql). Same database as the analysis path — INV-2's sibling constraint
 # holds, an identifier is still verified against the database that will execute it —
@@ -67,7 +69,7 @@ _ENSURED: set[tuple[str, str]] = set()
 _LOCK = threading.Lock()
 
 
-class Unavailable(RuntimeError):
+class Unavailable(unreachable.Unreachable):
     """The system database could not be reached. The operator's problem, not the author's."""
 
 
@@ -130,5 +132,5 @@ def _connect(ddl: str) -> Any:
     except psycopg2.Error as exc:
         _CONN = None
         _ENSURED.clear()
-        raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
+        raise Unavailable.not_answering(DSN_VAR, exc) from exc
     return _CONN

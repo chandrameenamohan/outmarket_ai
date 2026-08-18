@@ -125,8 +125,14 @@ REPLY: dict[str, list[dict[str, Any]]] = {
 }
 
 
+# How many proposals the product asks for, which is the store's bulk cap and never a
+# literal here (bead dq-5da): a check that passed its own limit would be exercising a
+# number nothing in the product uses.
+CAP = store.BULK_CAP
+
+
 def proposals() -> tuple[suggest.Proposal, ...]:
-    return suggest.proposals(orders_profile(), REPLY)
+    return suggest.proposals(orders_profile(), REPLY, CAP)
 
 
 def unsubstituted(proposal: suggest.Proposal) -> list[str]:
@@ -171,7 +177,7 @@ def test_a_proposal_outside_the_catalog_is_refused_rather_than_returned(etype: s
     """
     reply = {"rules": [{"type": etype, "kwargs": {"column_A": "a", "column_B": "b"}}]}
     with pytest.raises(RuleRejected) as raised:
-        suggest.proposals(orders_profile(), reply)
+        suggest.proposals(orders_profile(), reply, CAP)
     assert etype in str(raised.value), "the refusal must name the type that was refused"
 
     with pytest.raises(RuleRejected) as direct:
@@ -189,7 +195,7 @@ def test_one_bad_rule_refuses_the_whole_batch_rather_than_vanishing() -> None:
     good = proposals()
     reply = {"rules": [*REPLY["rules"], {"type": OUTSIDE_THE_CATALOG[0], "kwargs": {}}]}
     with pytest.raises(RuleRejected) as raised:
-        suggest.proposals(orders_profile(), reply)
+        suggest.proposals(orders_profile(), reply, CAP)
     assert OUTSIDE_THE_CATALOG[0] in str(raised.value), str(raised.value)
     assert len(good) == len(REPLY["rules"]), (
         "the same reply without the bad rule must produce every proposal in it — otherwise "
@@ -378,7 +384,7 @@ def test_a_half_bounded_proposal_reads_as_a_sentence() -> None:
             },
         ]
     }
-    lower, tolerated = suggest.proposals(orders_profile(), reply)
+    lower, tolerated = suggest.proposals(orders_profile(), reply, CAP)
     assert lower.statement == "Every order_total is at least 0", lower.statement
     assert (
         tolerated.statement == "Every shipped_at has a value, in at least 98% of rows"

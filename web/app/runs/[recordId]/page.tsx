@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { read, refused, type RunView } from "../../api";
 import { RunPanel } from "../panel";
 
@@ -11,17 +12,25 @@ export const metadata = { title: "Run record" };
  * record at a different address rather than editing this one. That is what makes the URL
  * worth pasting into a conversation — the receiver sees the same run the sender did.
  *
- * A RECORD THAT DOES NOT EXIST IS NOT A 404 HERE, and the difference from the rule
- * permalink is deliberate. A rule id that was never written is a broken link and says so
- * with the status code. A record id, though, is the thing other screens compose links out
- * of and the thing a run hands back at the end — so the useful answer names the id that
- * was asked for and offers the table's current state, rather than replacing the address
- * with a not-found page that has lost the id it was about.
+ * A RECORD ID THAT NAMES NOTHING IS A 404, THE SAME AS A RULE ID — and it used to not
+ * be. `/rules/not-a-uuid` answered 404 and the not-found page; `/runs/not-a-uuid`
+ * answered **200** with a heading reading "Run not-a-uuid" and the API's sentence as a
+ * banner. The API was right both times; this page simply did not branch. Two addresses
+ * carry an id somebody can mistype, and they may not disagree about what a mistyped one
+ * means — a 200 for a thing that does not exist is also what a crawler and a link
+ * checker each record as fine.
+ *
+ * ANYTHING ELSE IS STILL A BANNER, and that is the distinction worth keeping: a database
+ * that is not answering is a 503, and telling that reader "there is nothing at this
+ * address" would send them to fix a link that is perfectly good.
  */
 export default async function Page({ params }: PageProps<"/runs/[recordId]">) {
   const { recordId } = await params;
   const answer = await read<RunView>(`/records/${encodeURIComponent(recordId)}`);
 
+  if (refused(answer) && answer.status === 404) {
+    notFound();
+  }
   if (refused(answer) || !answer.record) {
     return (
       <div className="screen-head">

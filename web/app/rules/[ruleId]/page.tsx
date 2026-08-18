@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { read, refused, write, type Rule } from "../../api";
-import { chosenRole } from "../../role";
 
 export const metadata = { title: "Rule" };
 
@@ -22,11 +21,13 @@ export const metadata = { title: "Rule" };
  * gets that same view, which is the conservative half of web/app/role.ts's default.
  * See that file for why a `/engineer/...` prefix would break exactly this.
  *
- * AND THE PAYLOAD DOES NOT CARRY IT EITHER, as of bead dq-rbf.4: `?configuration=1` is
- * asked for only in the engineer's render, so for anyone else the word is absent from
- * the JSON as well as from the markup. That closed the last gap in the sentence above —
- * a component deciding not to print a field it was handed is one refactor away from
- * printing it.
+ * AND THE PAYLOAD DOES NOT CARRY IT EITHER, as of bead dq-rbf.4 — a component deciding
+ * not to print a field it was handed is one refactor away from printing it. This page no
+ * longer decides that for itself, though, and that is bead dq-220: it asks `read()` for a
+ * rule and takes what arrives, because four pages each holding their own copy of the role
+ * rule is how `/runs/<recordId>` came to serve the framework to everyone. The omission
+ * lives in `web/app/api.ts::frameworkVisible` now, which is the one door both this page
+ * and the page nobody has written yet must come through.
  *
  * ponytail: the configuration pane is read-only here. The editable one is on the rules
  * screen (`/tables/[table]/rules`), which is where both edit doors live because both of
@@ -40,10 +41,7 @@ export const metadata = { title: "Rule" };
 export default async function Page({ params, searchParams }: PageProps<"/rules/[ruleId]">) {
   const { ruleId } = await params;
   const { refused: complaint } = await searchParams;
-  const engineer = (await chosenRole()) === "engineer";
-  const rule = await read<Rule>(
-    `/rules/${encodeURIComponent(ruleId)}${engineer ? "?configuration=1" : ""}`,
-  );
+  const rule = await read<Rule>(`/rules/${encodeURIComponent(ruleId)}`);
 
   if (refused(rule)) {
     // A pasted link to a rule nobody ever wrote is a 404 and should say so with the

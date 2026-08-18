@@ -17,11 +17,16 @@ import { stream } from "../api";
  * thing one layer down, and `tests/test_run_endpoint.py` fails the gate on a GET that
  * reaches the run route.
  *
- * ponytail: no `duplex`, no `TransformStream`, no chunk rewriting. `Response` accepts the
- * upstream body as it stands and Next writes it out; the framing is `\n`, which nothing
- * in the path is tempted to reflow. Ceiling: a caller that closes the tab leaves this
- * handler to notice a broken pipe on its own — which is exactly what the Python side is
- * built to expect, and what makes an abandoned run leave no record (SPEC F9).
+ * ponytail: this handler still rewrites nothing. It reads a query parameter, calls
+ * `stream()` and hands back whatever body came out of it; `Response` accepts that body
+ * as it stands and Next writes it out. The rewriting that DOES happen is one layer down
+ * and belongs there — `api.ts::stream` pipes the domain expert's body through
+ * `framework.ts::framelessLines`, a `TransformStream` that takes the framework out of
+ * every event for the reader F12 Rev 0.4 hides it from (and whose own ceiling, a
+ * non-JSON line throwing there rather than reaching the browser, is stated where it
+ * lives). Ceiling here: a caller that closes the tab leaves this handler to notice a
+ * broken pipe on its own — which is exactly what the Python side is built to expect,
+ * and what makes an abandoned run leave no record (SPEC F9).
  */
 export async function POST(request: Request): Promise<Response> {
   const table = new URL(request.url).searchParams.get("table");

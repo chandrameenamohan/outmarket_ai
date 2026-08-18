@@ -99,6 +99,13 @@ _WRITE = """
 # Eight is what fits on a screen alongside its evidence lines, which is the whole
 # requirement (UX_HARNESS_FINDINGS §4): a bulk accept that hides what it is accepting
 # is how forty business-naive rules (LT-2b) enter at once.
+#
+# IT IS ALSO HOW MANY THE PROPOSER IS ASKED FOR. `app/rules/desk.py` hands this number
+# to `app/rules/suggest.py::for_table`, so the screen cannot be shown more proposals
+# than one act can accept. That used to be a second constant in the generator, set to
+# ten, and the two drifted in the one direction that makes the copy a lie: eight fit on
+# screen with their evidence, ten do not, so "every evidence line is on screen when you
+# press it" stopped being true exactly where it mattered (bead dq-5da).
 BULK_CAP = 8
 
 
@@ -313,7 +320,22 @@ def accepted(revs: Iterable[Revision]) -> tuple[Revision, ...]:
 
 
 def latest(rule_id: str) -> Revision:
-    """The current revision of one rule, read back from the store."""
+    """The current revision of one rule, read back from the store.
+
+    A string that is not a uuid is an UNKNOWN RULE and not a database error — the same
+    guard, for the same reason, as `app/dq/runs.py::find` (bead dq-abs). Every rule id
+    the product ever handles arrives through here, from a URL somebody pasted or a link
+    somebody edited, so the malformed case is ordinary rather than exceptional. Without
+    it PostgreSQL refuses the `::uuid` cast in `_READ` and the driver's error is nobody's
+    refusal: it escapes the handler, drops the connection, and reaches the reader as
+    whatever the proxy in front decides to say about the address it could not reach.
+    """
+    try:
+        uuid.UUID(rule_id)
+    except ValueError as exc:
+        raise UnknownRule(
+            f"{rule_id!r} is not a rule id, so no rule was ever written under it"
+        ) from exc
     found = current(revisions(rule_id=rule_id))
     if not found:
         raise UnknownRule(f"no rule {rule_id!r} has ever been written to this store")

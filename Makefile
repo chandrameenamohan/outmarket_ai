@@ -123,6 +123,17 @@ check-ui:
 # checks (F15) re-run seed/seed_demo_data.py itself, which imports psycopg 3, in a
 # subprocess of THIS interpreter — and an ephemeral env inherits no site-packages.
 #
+# `claude-agent-sdk` is here for that same last clause, and it is a COLLECTION dependency
+# rather than a runtime one. `-m ge` selects 33 checks, none of which asks a model — but
+# pytest IMPORTS every module under `testpaths` before it applies a marker, and seven of
+# them reach `app/model.py` through `suggest`/`authoring`/`app.api.server`. Without this
+# the whole target dies with `ModuleNotFoundError: No module named 'claude_agent_sdk'` and
+# `Interrupted: 7 errors during collection` — a red target that has verified nothing, which
+# is the one failure mode this repository refuses to tolerate. Measured on 2026-08-18 at
+# close-out: without it, 7 collection errors in 0.76 s, exit 2; with it, 33 passed, 269
+# deselected, 199.79 s, exit 0. It is the same `--with` VERIFICATION.md §1 already calls
+# load-bearing on the API process's line, for the same reason.
+#
 # RUN IT ALONGSIDE `check-ui` IF YOU LIKE — that is fixed (bead dq-cyi.4), and it used to
 # take both layers red. They both WRITE and the store is append-only (F6), so while they
 # shared DQ_SCHEMA=dq_check a check counting rules before and after an action was reading
@@ -136,7 +147,8 @@ check-ui:
 check-ge:
 	set -a; . ./.env; set +a; \
 	uv run --no-project --with pytest --with great-expectations --with 'sqlalchemy>=2' \
-	  --with psycopg2-binary --with 'psycopg[binary]' $(PY) -m pytest -m ge
+	  --with psycopg2-binary --with 'psycopg[binary]' --with claude-agent-sdk==0.1.23 \
+	  $(PY) -m pytest -m ge
 
 # The fixed demo fixture (bead dq-vix): eight rules and two run records in the DEMO
 # store `dq`, which is the store the app reads with no DQ_SCHEMA set. It is what makes
@@ -156,7 +168,7 @@ check-ge:
 demo-fixture:
 	set -a; . ./.env; set +a; \
 	uv run --no-project --with great-expectations --with 'sqlalchemy>=2' \
-	  --with psycopg2-binary $(PY) seed/seed_demo_rules.py $(ARGS)
+	  --with psycopg2-binary --with claude-agent-sdk $(PY) seed/seed_demo_rules.py $(ARGS)
 
 # The reset for the two scratch schemas `check-ui` and `check-ge` accumulate rules and
 # run records in — `dq_check` and `dq_check_ge`, named once in tests/scratch.py and read
