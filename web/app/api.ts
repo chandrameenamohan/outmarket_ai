@@ -16,6 +16,11 @@
  * where the markup is written, so the domain expert's document does not contain it at
  * all. A stylesheet hiding a pane that shipped is a different, weaker promise.
  *
+ * AND THAT DECISION IS TAKEN AT THIS DOOR, ONCE, FOR EVERY SCREEN. `./framework.ts`
+ * holds the question and the redaction — see it for why they stopped being taken four
+ * times, and for why they are a file of their own rather than the second half of this
+ * one. Both functions here call them; nothing else in `web/` imports either.
+ *
  * ponytail: `fetch`, no client, no generated types, no schema validation at the
  * boundary. The producer and the consumer ship together and the gate runs both, so a
  * validator here would be a third copy of a shape two languages already agree on.
@@ -24,8 +29,36 @@
  * the process is not running, or the thing asked for is not there.
  */
 
+import { framelessLines, frameworkVisible, withoutFramework } from "./framework";
+
 /** Where the Python process answers. Server-side only; never sent to the browser. */
 const BASE = process.env.DQ_API_URL ?? "http://localhost:8000";
+
+/** The framing the Python side refuses in, so one line reader parses both (app/api/refuse.py). */
+const NDJSON = "application/x-ndjson";
+
+/**
+ * What a reader is told when the process behind this page cannot be reached at all.
+ *
+ * IT USED TO BE `${BASE} did not answer: ${error}`, and that is bead dq-abs. `BASE` is
+ * a PRIVATE address — `http://api.railway.internal:8000` in the deployment — and the
+ * refusal put it, its port and the JavaScript error class on a page any stranger could
+ * reach by mistyping a URL. None of it is usable by the person reading; the host, the
+ * port and the runtime are each usable by someone probing (SPEC §3.1).
+ *
+ * So the reader gets the two facts that are theirs — the item did not load, and it is
+ * not something they did — and the operator gets the rest through `console.error`,
+ * which on a Server Component lands in the service log and never in the markup.
+ */
+const UNREACHABLE =
+  "This could not be loaded just now — the service behind this page did not answer. " +
+  "Nothing you did caused it and nothing was changed. Try again in a moment; if it " +
+  "keeps happening, tell whoever runs this.";
+
+/** The engineer's half of the wire contract: `?configuration=1`, on whatever path. */
+function configured(path: string): string {
+  return `${path}${path.includes("?") ? "&" : "?"}configuration=1`;
+}
 
 /** The `{type, kwargs}` pair, ours, and the shape the compiler consumes. */
 export type Spec = { type: string; kwargs: Record<string, unknown> };
@@ -34,9 +67,9 @@ export type Spec = { type: string; kwargs: Record<string, unknown> };
  * One rule, as `app/rules/view.py` composes it.
  *
  * `configuration` IS OPTIONAL, AND THAT IS SPEC F12'S REV 0.4 AMENDMENT IN THE TYPE.
- * It is present when the request asked for it (`?configuration=1`, which the engineer's
- * render does and the domain expert's does not) and absent otherwise — not null, not
- * empty: the key is not in the payload at all, so there is no framework in the document
+ * It is present for the engineer and absent for everyone else — `frameworkVisible()`
+ * above decides which, for every screen at once — and absent means absent: not null,
+ * not empty, the key is not in the payload at all, so there is no framework in the document
  * a domain expert receives. A required field here would have made that unrepresentable
  * and pushed the hiding into a component, where a stylesheet is the only thing standing
  * between a reader and the abstraction this product exists to hide.
@@ -196,6 +229,11 @@ export type Coverage = {
  * violating count to report, and for every errored rule — a rule that could not run
  * counted nothing, and "0 violating rows" beside it is exactly the confusion
  * `catch_exceptions` creates (LT-1a).
+ *
+ * `raw` IS THE ENGINEER'S, and optional for the same reason `configuration` is: the
+ * record on the wire carries it unasked, and the door takes it out for anyone else
+ * (`FRAMEWORK_KEYS`). The payload also carries a `spec` this type does not declare —
+ * declaring it would be declaring a field no screen may render.
  */
 export type Reading = {
   statement: string;
@@ -268,25 +306,75 @@ export async function write<T>(path: string, body: unknown): Promise<T | Refused
  * second origin, its CORS headers and a URL in the bundle. One route handler on our own
  * origin costs none of that, and this function keeps the address of the process in the
  * one file that is allowed to know it.
+ *
+ * IT IS THE SECOND DOOR, SO IT ASKS THE SAME QUESTION. A verdict event carries the
+ * framework's own output, and a run is how the domain expert's screen fills up — so
+ * redacting the page load and passing the stream through untouched would hide the
+ * configuration until somebody pressed the button. The engineer's body is still handed
+ * over byte for byte; everyone else's goes through `framelessLines()`.
+ *
+ * AND IT REFUSES THE SAME WAY, which it did not until now. `call()` caught an
+ * unreachable process and `stream()` did not, so with the Python side down `POST
+ * /run?table=orders` left the exception to Next and answered **500 with a zero-byte
+ * body** — nothing for `panel.tsx`'s line reader to read and nothing for a person to
+ * act on, so the screen said "the run could not be started (500)" and showed a domain
+ * expert a status code. Both doors go through `ask()` now, so there is one place where
+ * the address is used and one place where it can fail.
  */
-export function stream(path: string): Promise<Response> {
-  return fetch(BASE + path, { method: "POST", cache: "no-store" });
+export async function stream(path: string): Promise<Response> {
+  // Asked BEFORE the run is started, not after: a run is a real fifteen seconds of
+  // database work, and the reader it is for is decided while nothing is in flight.
+  const framework = await frameworkVisible();
+  const answer = await ask(path, { method: "POST" });
+  if (!answer) {
+    // The NDJSON refusal shape `app/api/refuse.py` writes, because the client reading
+    // this is the same line reader either way (web/app/runs/panel.tsx::events).
+    return new Response(JSON.stringify({ event: "refused", message: UNREACHABLE }) + "\n", {
+      status: 503,
+      headers: { "Content-Type": NDJSON },
+    });
+  }
+  if (framework || !answer.body) {
+    return answer;
+  }
+  return new Response(answer.body.pipeThrough(framelessLines()), {
+    status: answer.status,
+    headers: answer.headers,
+  });
+}
+
+/**
+ * THE ONLY PLACE `BASE` IS USED, and therefore the only place the process can be
+ * unreachable. Both doors call it, so neither can be the one that forgot the `try` —
+ * which is what `tests/test_malformed_requests.py` pins by counting the occurrences.
+ * `null` rather than a throw: the two callers answer a failure in two shapes, a
+ * `Refused` and an NDJSON `Response`, and neither of them is an exception.
+ *
+ * `no-store` on every call: a rule's state changes the moment somebody presses one of
+ * the buttons on the page that is reading it, and a cached judgment is a screen telling
+ * two people different things about what will execute tonight.
+ */
+async function ask(path: string, init: RequestInit): Promise<Response | null> {
+  try {
+    return await fetch(BASE + path, { ...init, cache: "no-store" });
+  } catch (error) {
+    // The address and the cause go to the service log, where the person who can act on
+    // them reads them; the page gets `UNREACHABLE` and nothing else.
+    console.error(`api call failed: ${init.method} ${path}`, error);
+    return null;
+  }
 }
 
 async function call<T>(path: string, init: RequestInit): Promise<T | Refused> {
-  let response: Response;
-  try {
-    // `no-store` on every call: a rule's state changes the moment somebody presses one
-    // of the buttons on the page that is reading it, and a cached judgment is a screen
-    // telling two people different things about what will execute tonight.
-    response = await fetch(BASE + path, { ...init, cache: "no-store" });
-  } catch (error) {
-    return { refused: `${BASE} did not answer: ${error}`, status: 503 };
+  const framework = await frameworkVisible();
+  const response = await ask(framework ? configured(path) : path, init);
+  if (!response) {
+    return { refused: UNREACHABLE, status: 503 };
   }
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.message ?? `${response.status} from ${path}`;
     return { refused: String(message), status: response.status };
   }
-  return payload as T;
+  return (framework ? payload : withoutFramework(payload)) as T;
 }

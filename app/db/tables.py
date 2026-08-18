@@ -15,6 +15,10 @@ inserted into heavily since the last ANALYZE reads low, and PostgreSQL 14+ write
 turns into 0 rather than a nonsense negative. Both are the right trade for a
 number rendered as "~500,000".
 
+THE ONE THING NOT LISTED is a learning test's own scratch table — `listed()` below has
+the rule and the argument for it. Everything else in the schema is here, including the
+table with nothing checking it, which is the row this screen exists for.
+
 WHY COVERAGE IS ONLY `accepted`. `app/rules/store.accepted()` is the one place
 that decides, and it is the same function that decides what EXECUTES (F6). A
 table listing that counted proposals would report coverage nobody agreed to.
@@ -36,12 +40,43 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import re
 from collections.abc import Iterable, Mapping
 
 import psycopg2
 
 from app.rules import schema as live
 from app.rules import store
+
+# A learning test's scratch table is not data under analysis, and this is the pattern
+# that says so: `lt` followed by the test's number, which is what the four tests in
+# `learning-tests/` name their tables after (`lt1a_probe`, a 100-row leftover from
+# LT-1a, is the one that reached the deployed demo).
+#
+# WHY A PATTERN AND NOT A DROP. The table belongs to a landed learning test — evidence
+# for a result already recorded in `learning-tests/FINDINGS.md` — so removing it from
+# the database is that test's owner's call and not this module's. What IS this module's
+# call is what the front door invites an engineer to care about: F1 lists the tables
+# whose quality is the product's subject, and a probe nobody is being asked to vouch
+# for makes a deliberate demo dataset (`seed/MANIFEST.md`, SPEC F15) read as somebody's
+# scratch database.
+#
+# WHY NOT AN ALLOWLIST OF THE THREE SEEDED TABLES. Because then this stops being a
+# coverage view of a database and becomes a view of our demo: point it at a real schema
+# and it would show nothing at all, silently. A rule about probe names fails the other
+# way — the worst it can do is show one table too many.
+#
+# ponytail: one regex, anchored, and `lt` must be followed by a DIGIT so that a business
+# table called `ltv_by_cohort` is safe. Ceiling: a real table named `lt3_forecasts` is
+# invisible on this screen while still being profileable, rule-able and runnable by URL.
+# The upgrade path is a schema of its own for probes, which is a database change.
+_LEARNING_TEST = re.compile(r"^lt[0-9]")
+
+
+def listed(name: str) -> bool:
+    """Does this table belong on the coverage screen? Pure, so the rule is checkable."""
+    return not _LEARNING_TEST.match(name)
+
 
 # One statement for the whole listing: `pg_class` carries the row estimate and
 # `pg_attribute` the columns, so joining them here costs one round trip to
@@ -117,7 +152,7 @@ def shapes() -> tuple[Table, ...]:
             cur.execute(_SHAPE)
             rows = cur.fetchall()
     except psycopg2.Error as exc:
-        raise live.Unavailable(f"{live.DSN_VAR} did not answer: {exc}") from exc
+        raise live.Unavailable.not_answering(live.DSN_VAR, exc) from exc
 
     # Grouped in Python rather than with an aggregate: the query already returns
     # the rows in (table, column) order, so this is a fold over a sorted stream,
@@ -125,6 +160,8 @@ def shapes() -> tuple[Table, ...]:
     columns: dict[str, dict[str, str]] = collections.defaultdict(dict)
     estimate: dict[str, int] = {}
     for name, approx_rows, column, data_type in rows:
+        if not listed(name):
+            continue
         columns[name][column] = data_type
         estimate[name] = approx_rows
     return tuple(Table(name, cols, estimate[name]) for name, cols in columns.items())

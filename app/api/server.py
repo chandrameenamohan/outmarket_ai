@@ -63,11 +63,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from http.server import BaseHTTPRequestHandler
 from typing import Any
 
-from app.api import request
+from app.api import refuse, request
 from app.api.dualstack import DualStackServer
+from app.api.refuse import NDJSON, REFUSALS
 from app.dq import coverage, normalise, profile, run, runs
 from app.rules import desk, store, view
 from app.rules import schema as live
@@ -119,22 +119,13 @@ DRAFT_ROUTE = "/drafts"
 # framework is then absent from the answer rather than hidden in it. See app/rules/view.py.
 CONFIGURATION = "configuration"
 
-# Not `application/json`: the body is a SEQUENCE of JSON documents, and a client that
-# waited to parse it as one object would wait for the whole run — which is the exact
-# behaviour this endpoint exists to avoid. It is the RUN's content type only; the read
-# surface below answers with one document and says so.
-NDJSON = "application/x-ndjson"
+# `NDJSON` is the RUN's content type and the refusal shape's; it and `REFUSALS` live in
+# `app/api/refuse.py`, beside the one thing that writes with both. The read surface below
+# answers with one document and says so.
 JSON = "application/json"
 
 PORT_VAR = "DQ_API_PORT"
 DEFAULT_PORT = 8000
-
-# What the store, the profiler and the schema reader raise when the thing asked for is
-# not there or the database is not answering — `Unavailable` on both sides is a
-# RuntimeError, so this set covers it without naming two modules' exception classes.
-# Caught as one set because the honest response to all of them is the same: a status
-# code carrying the sentence they wrote, never a 200 with an empty screen behind it.
-REFUSALS = (LookupError, RuntimeError, ValueError)
 
 
 def plan(table: str) -> tuple[normalise.Scan, tuple[dict[str, Any], ...], tuple[str, ...]]:
@@ -177,9 +168,15 @@ def plan(table: str) -> tuple[normalise.Scan, tuple[dict[str, Any], ...], tuple[
     return scan, specs, identifiers
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(refuse.Refusing):
     """Every route the product has. Each verb dispatches in one short function and does
     no work itself.
+
+    BOTH VERBS RUN INSIDE `self.guard()`, and that is bead dq-abs. The route chain below
+    covers the requests we thought of; the guard covers the ones we did not, and turns
+    them into a status code instead of a dropped connection a proxy reports as a 502 in
+    its own words. It wraps `request.parse` too, because a path we cannot even split is
+    the same class of problem as a body we cannot parse.
 
     `_ROUTES` is the whole route table as a sentence, and it is what a 404 says back —
     so a client that guesses wrong is told what this server actually has, which is the
@@ -197,56 +194,58 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
 
     def do_GET(self) -> None:  # the base class names the verb; the case is not ours
-        segments, query = request.parse(self.path)
-        if request.route(segments) == RULE_ROUTE and len(segments) == 1:
-            self._read(
-                lambda: desk.workbench(
-                    request.one(query, "table"), request.flag(query, CONFIGURATION)
+        with self.guard():
+            segments, query = request.parse(self.path)
+            if request.route(segments) == RULE_ROUTE and len(segments) == 1:
+                self._read(
+                    lambda: desk.workbench(
+                        request.one(query, "table"), request.flag(query, CONFIGURATION)
+                    )
                 )
-            )
-        elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
-            self._read(lambda: view.of(segments[1], request.flag(query, CONFIGURATION)))
-        elif request.route(segments) == TABLE_ROUTE and len(segments) == 1:
-            self._read(coverage.listing)
-        elif request.route(segments) == REVIEW_ROUTE and len(segments) == 1:
-            self._read(lambda: view.queue(request.optional(query, "table")))
-        elif request.route(segments) == RECORD_ROUTE and len(segments) == 1:
-            self._read(lambda: view.last_run(request.one(query, "table")))
-        elif request.route(segments) == RECORD_ROUTE and len(segments) == 2:
-            self._read(lambda: view.run_record(segments[1]))
-        else:
-            self._refuse(404, _ROUTES)
+            elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
+                self._read(lambda: view.of(segments[1], request.flag(query, CONFIGURATION)))
+            elif request.route(segments) == TABLE_ROUTE and len(segments) == 1:
+                self._read(coverage.listing)
+            elif request.route(segments) == REVIEW_ROUTE and len(segments) == 1:
+                self._read(lambda: view.queue(request.optional(query, "table")))
+            elif request.route(segments) == RECORD_ROUTE and len(segments) == 1:
+                self._read(lambda: view.last_run(request.one(query, "table")))
+            elif request.route(segments) == RECORD_ROUTE and len(segments) == 2:
+                self._read(lambda: view.run_record(segments[1]))
+            else:
+                self.refuse(404, _ROUTES)
 
     def do_POST(self) -> None:
-        segments, query = request.parse(self.path)
-        configured = request.flag(query, CONFIGURATION)
-        if request.route(segments) == RUN_ROUTE and len(segments) == 2:
-            self._run(segments[1])
-        elif request.route(segments) == RULE_ROUTE and len(segments) == 1:
-            self._batch()
-        elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
-            self._judge(segments[1])
-        elif (
-            request.route(segments) == RULE_ROUTE
-            and len(segments) == 3
-            and segments[2] == "revision"
-        ):
-            body = self._body()
-            # `asyncio.run` on this request's own thread, here and on the two billed
-            # routes below. F12's authoring path is `async` because the Agent SDK is,
-            # and this server is threads rather than an event loop (ThreadingHTTPServer;
-            # see the module docstring) — so each request makes a loop, runs the one call
-            # and closes it. There is no loop to conflict with and nothing shared between
-            # them, and the setup is microseconds beside a call that spends 6.6 s on the
-            # network (LT-2b).
-            self._read(lambda: asyncio.run(desk.revise(segments[1], *request.revision(body))))
-        elif request.route(segments) == PROPOSAL_ROUTE and len(segments) == 2:
-            self._read(lambda: asyncio.run(desk.proposals(segments[1], configured)))
-        elif request.route(segments) == DRAFT_ROUTE and len(segments) == 2:
-            asked = request.required(self._body(), "request")
-            self._read(lambda: asyncio.run(desk.draft(asked, segments[1], configured)))
-        else:
-            self._refuse(404, _ROUTES)
+        with self.guard():
+            segments, query = request.parse(self.path)
+            configured = request.flag(query, CONFIGURATION)
+            if request.route(segments) == RUN_ROUTE and len(segments) == 2:
+                self._run(segments[1])
+            elif request.route(segments) == RULE_ROUTE and len(segments) == 1:
+                self._batch()
+            elif request.route(segments) == RULE_ROUTE and len(segments) == 2:
+                self._judge(segments[1])
+            elif (
+                request.route(segments) == RULE_ROUTE
+                and len(segments) == 3
+                and segments[2] == "revision"
+            ):
+                body = self._body()
+                # `asyncio.run` on this request's own thread, here and on the two billed
+                # routes below. F12's authoring path is `async` because the Agent SDK is,
+                # and this server is threads rather than an event loop
+                # (ThreadingHTTPServer; see the module docstring) — so each request makes
+                # a loop, runs the one call and closes it. There is no loop to conflict
+                # with and nothing shared between them, and the setup is microseconds
+                # beside a call that spends 6.6 s on the network (LT-2b).
+                self._read(lambda: asyncio.run(desk.revise(segments[1], *request.revision(body))))
+            elif request.route(segments) == PROPOSAL_ROUTE and len(segments) == 2:
+                self._read(lambda: asyncio.run(desk.proposals(segments[1], configured)))
+            elif request.route(segments) == DRAFT_ROUTE and len(segments) == 2:
+                asked = request.required(self._body(), "request")
+                self._read(lambda: asyncio.run(desk.draft(asked, segments[1], configured)))
+            else:
+                self.refuse(404, _ROUTES)
 
     # --- the run: one action, one response, one line of JSON per verdict ----------
 
@@ -254,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             scan, specs, identifiers = plan(table)
         except REFUSALS as exc:
-            self._refuse(422, str(exc))
+            self.refuse_raised(exc)
             return
 
         self.send_response(200)
@@ -278,10 +277,11 @@ class Handler(BaseHTTPRequestHandler):
     def _read(self, produce: Any) -> None:
         """Run a reader and answer with what it returned, or with why it could not.
 
-        A thing that is not there is a 404 and everything else a 422, which is the
-        distinction a permalink actually needs: a pasted link to a rule, a run record or
-        a table that does not exist is a different problem from a database that is not
-        answering, and the screen renders them differently. All three misses are the same
+        A thing that is not there is a 404, and everything else is
+        `refuse_raised`'s call between 422 and 503 — which is the distinction a permalink
+        actually needs: a pasted link to a rule, a run record or a table that does not
+        exist is a different problem from a database that is not answering, and the
+        screen renders them differently. All three misses are the same
         answer, so they are caught as one tuple rather than as three clauses that could
         drift — `UnknownTable` joined with F12's desk (dq-rbf.4), which reads the live
         schema before it composes anything from a name that arrived in a URL (SPEC §3.1).
@@ -292,11 +292,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = produce()
         except (store.UnknownRule, runs.UnknownRun, live.UnknownTable) as exc:
-            self._refuse(404, str(exc))
+            self.refuse(404, str(exc))
         except REFUSALS as exc:
-            self._refuse(422, str(exc))
+            self.refuse_raised(exc)
         else:
-            self._send(200, json.dumps(payload).encode(), JSON)
+            self.answer(200, json.dumps(payload).encode(), JSON)
 
     def _batch(self) -> None:
         """F12 · one act of judgment over a selection (SPEC F12, bead dq-rbf.4).
@@ -329,10 +329,10 @@ class Handler(BaseHTTPRequestHandler):
             reason = (body.get("reason") or "").strip() or None
             store.set_status(rule_id, str(body.get("status")), reason)
         except store.UnknownRule as exc:
-            self._refuse(404, str(exc))
+            self.refuse(404, str(exc))
             return
         except REFUSALS as exc:
-            self._refuse(422, str(exc))
+            self.refuse_raised(exc)
             return
         self._read(lambda: view.of(rule_id))
 
@@ -345,26 +345,6 @@ class Handler(BaseHTTPRequestHandler):
         reassemble.
         """
         return request.body(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
-
-    # --- writing bytes -----------------------------------------------------------
-
-    def _refuse(self, code: int, message: str) -> None:
-        """One refusal shape for both surfaces.
-
-        It stays NDJSON-framed — one object, then a newline — because the run's client
-        reads this response with the same line reader it reads verdicts with, and the
-        read surface's client parses one document either way.
-        """
-        body = json.dumps({"event": "refused", "message": message}).encode() + b"\n"
-        self._send(code, body, NDJSON)
-
-    def _send(self, code: int, body: bytes, content_type: str) -> None:
-        self.send_response(code)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
 
 
 def serve(port: int | None = None) -> None:

@@ -35,6 +35,7 @@ from typing import Any
 
 from app.dq import normalise, profile, runs, status
 from app.rules import catalog, store, suggest
+from app.rules import schema as live
 
 # The three judgments, paired with the state each one writes. The states are imported
 # from the store rather than re-typed: it owns the closed set, and a fourth pair here
@@ -256,6 +257,13 @@ def queue(table: str | None = None) -> dict[str, Any]:
     Two reads per table with rules — the run record and the cached profile — and the
     profile only for tables that actually put something in the queue.
     """
+    if table is not None:
+        # SPEC §3.1, and the same guard `desk.workbench` and `plan()` already run: a
+        # table name that arrived in a URL is proven against the live schema before it
+        # selects anything. Without it this was the one route in the product that
+        # answered 200 for a table nobody has — an empty queue and a made-up name look
+        # identical, and `/rules?table=nope` and `POST /runs/nope` both refuse it.
+        live.columns(table)
     revs = store.current(store.revisions(table=table))
     # ONE READ PER TABLE, not one per rule. The set comprehension is the whole of that
     # and it is not a micro-optimisation: keyed off `revs` directly, a table with thirty

@@ -38,7 +38,7 @@ def test_the_menu_the_model_is_given_is_the_whole_catalog_and_only_the_catalog()
     would be exactly the second source of truth `tests/test_catalog_and_copy.py` exists
     to prevent, and the one that would silently stop matching the validator.
     """
-    prompt = suggest._prompt(orders_profile())
+    prompt = suggest._prompt(orders_profile(), store.BULK_CAP)
     missing = [t for t in catalog.TYPES if t not in prompt]
     assert not missing, f"the model is never shown {missing}, so it can never propose them"
     named = set(re.findall(r"\bexpect_[a-z_]+\b", prompt))
@@ -57,7 +57,7 @@ def test_prompt_payload_contains_no_full_table_rows() -> None:
     distinction this check exists to draw.
     """
     profiled = orders_profile()
-    prompt = suggest._prompt(profiled)
+    prompt = suggest._prompt(profiled, store.BULK_CAP)
 
     serialised = re.search(r"^\[.*\]$", prompt, re.M)
     assert serialised, f"the sample rows are not in the prompt at all: {prompt[:400]!r}"
@@ -87,7 +87,7 @@ def test_the_evidence_a_reviewer_reads_is_the_evidence_the_model_was_given() -> 
     profile the model never saw, and the reviewer would be checking the proposal against
     numbers that did not produce it.
     """
-    prompt = suggest._prompt(orders_profile())
+    prompt = suggest._prompt(orders_profile(), store.BULK_CAP)
     for made in proposals():
         assert made.evidence in prompt, (
             f"{made.type}'s evidence line ({made.evidence!r}) is not in the prompt. The line "
@@ -135,7 +135,9 @@ def test_a_rule_whose_parameters_are_nonsense_never_becomes_a_proposal(
     accepts. They are refused before a human ever sees them, and a refusal saves nothing.
     """
     with pytest.raises(RuleRejected) as raised:
-        suggest.proposals(orders_profile(), {"rules": [{"type": etype, "kwargs": kwargs}]})
+        suggest.proposals(
+            orders_profile(), {"rules": [{"type": etype, "kwargs": kwargs}]}, store.BULK_CAP
+        )
     assert str(raised.value), f"a proposal refused for {why} must carry a readable reason"
 
 
@@ -153,7 +155,7 @@ def test_a_reply_with_no_rules_fails_rather_than_returning_nothing() -> None:
     )
     for reply in empty:
         with pytest.raises(RuleRejected) as raised:
-            suggest.proposals(orders_profile(), reply)
+            suggest.proposals(orders_profile(), reply, store.BULK_CAP)
         assert "no rules" in str(raised.value), (
             f"{reply} was refused with {str(raised.value)[:80]!r} — the reason has to say that "
             "the reply was empty, because the caller's alternative reading is 'all clear'."
@@ -170,19 +172,38 @@ def test_a_reply_whose_rules_are_not_objects_is_refused() -> None:
     )
     for rule in shapes:
         with pytest.raises(RuleRejected) as raised:
-            suggest.proposals(orders_profile(), {"rules": [rule]})
+            suggest.proposals(orders_profile(), {"rules": [rule]}, store.BULK_CAP)
         assert "type" in str(raised.value), str(raised.value)
 
 
 def test_more_rules_than_the_review_budget_are_not_all_returned() -> None:
-    """INV-1: five minutes to act on a table's proposals is the constraint, not token cost.
+    """The count the screen promises is the count the generator returns (bead dq-5da).
 
-    LT-1b also prices a full-catalog run at 13.97 s, so a reply of forty rules is not a
-    bonus — it is a review queue nobody finishes and a run nobody watches.
+    INV-1 gives a domain expert five minutes to act on a table's proposals and LT-1b
+    prices a full-catalog run at 13.97 s, so a reply of forty rules is not a bonus — it
+    is a review queue nobody finishes. But the number is not a preference about list
+    length: the bulk control's own sentence says "Up to N at a time, so every evidence
+    line is on screen when you press it", which is the ARGUMENT for why accepting in
+    bulk is safe. The generator used to hold a second constant of its own, set to ten,
+    and the live deployment answered `POST /proposals/payments` with ten proposals under
+    a control that promised eight.
+
+    NOTHING HERE NAMES A NUMBER. Both halves read `store.BULK_CAP` — the same value
+    `app/rules/desk.py` hands `for_table()` and the same one `status.bulk_note()`
+    prints — so the prompt, the slice and the copy cannot drift apart again.
     """
+    cap = store.BULK_CAP
     reply = {"rules": REPLY["rules"] * 5}
-    assert len(reply["rules"]) > suggest.MAX_PROPOSALS, "this check needs an oversized reply"
-    assert len(suggest.proposals(orders_profile(), reply)) == suggest.MAX_PROPOSALS
+    assert len(reply["rules"]) > cap, "this check needs a reply longer than the cap"
+    assert len(suggest.proposals(orders_profile(), reply, cap)) == cap, (
+        f"a reply of {len(reply['rules'])} rules produced more than {cap} proposals. The "
+        "prompt asks for the cap and this is what makes the count true, because a model "
+        "that replies with more is replying, not erroring."
+    )
+    assert f"at most {cap} rules" in suggest._prompt(orders_profile(), cap), (
+        "the prompt does not ask for the cap. Enforcing it only in the slice throws away "
+        "rules the model was invited to write, which is the same $0.04 for a shorter list."
+    )
 
 
 # --- the one check that spends money ------------------------------------------
@@ -198,7 +219,7 @@ def test_suggestions_for_orders_are_all_catalog_types_and_none_is_persisted_as_a
     a caller wired up wrongly rather than a module written wrongly.
     """
     before = store.revisions(table=TABLE)
-    made = asyncio.run(suggest.for_table(TABLE))
+    made = asyncio.run(suggest.for_table(TABLE, store.BULK_CAP))
     after = store.revisions(table=TABLE)
 
     assert made, "the model returned no proposals for a 500,000-row table with planted defects"

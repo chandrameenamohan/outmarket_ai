@@ -12,17 +12,19 @@ export const metadata = { title: "Rules" };
  * ITS IDEA IS A BILINGUAL SPREAD: the plain-English statement and the Great Expectations
  * configuration as facing pages, warm paper against cool
  * (`design/ux-variant-workbench.html`). SPEC F12 was amended to Rev 0.4 for it, and the
- * amendment is the single most important line in this file:
+ * amendment is not a line in this file any more — it is `web/app/api.ts`, which asks
+ * whether this reader may see the framework and hands every screen a payload that
+ * answers it. For the domain expert the GE pane is not collapsed, not hidden and not
+ * styled away: `item.configuration` is not in the payload, so the pane has nothing to
+ * render and does not. The mockup did it with `body.expert .ge-pane { display: none }`;
+ * a pane hidden with CSS is a pane that shipped.
  *
- *     const engineer = (await chosenRole()) === "engineer";
- *
- * That one boolean decides whether `?configuration=1` is asked for, which decides
- * whether the framework is IN THE PAYLOAD at all. For the domain expert the GE pane is
- * not collapsed, not hidden and not styled away — the data it would render never leaves
- * the Python process, so there is nothing in this document to reveal by scrolling, by
- * viewing source, or by a stylesheet failing to load. The mockup did it with
- * `body.expert .ge-pane { display: none }`; a pane hidden with CSS is a pane that
- * shipped.
+ * IT USED TO BE A LINE IN THIS FILE, and that is bead dq-220. This page decorated its own
+ * request with the configuration flag, `/review` and the rule permalink each did their own
+ * version of the same thing, and `/runs/<recordId>` — written later, by someone reading
+ * none of them — did not, and served nine expectation configurations to every reader. Four
+ * copies of a rule is not an enforced rule. The `engineer` boolean that survives below
+ * decides LAYOUT, which is this screen's business; what is in the payload is not.
  *
  * WHAT THE OTHER DIRECTION COSTS, AND WHAT IS GRAFTED IN. Three judges scored this
  * direction 6.5/10 on expert usability — second lowest of four — because its heart is
@@ -49,13 +51,12 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
   const { table } = await params;
   const { propose: asked, refused: complaint } = await searchParams;
 
-  // SPEC F12, Rev 0.4 — see the note above. This is the whole of the role's effect: one
-  // boolean, turned into one query parameter, deciding what the payload contains.
+  // Layout only — the sentence under the heading, and which of the two edit doors the
+  // authoring field opens. Whether the framework is in the payload at all is decided
+  // once, for every screen, in `web/app/api.ts` (SPEC F12 Rev 0.4, bead dq-220).
   const engineer = (await chosenRole()) === "engineer";
-  const asConfigured = (path: string) =>
-    engineer ? `${path}${path.includes("?") ? "&" : "?"}configuration=1` : path;
 
-  const desk = await read<Workbench>(asConfigured(`/rules?table=${encodeURIComponent(table)}`));
+  const desk = await read<Workbench>(`/rules?table=${encodeURIComponent(table)}`);
   if (refused(desk)) {
     return <p className="refused">{desk.refused}</p>;
   }
@@ -65,9 +66,16 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
   // behind it costs ~$0.04 and ~6.6 s (LT-2b) and a link is what a prefetch, a crawler
   // and a back button all issue on their own. `app/rules/suggest.py` memoises the batch
   // for five minutes, so reloading this URL is free.
-  const suggested = asked
+  //
+  // IT IS ALSO WHAT EVERY JUDGMENT FORM BELOW CARRIES BACK (B31). A refusal re-renders
+  // this screen, and a re-render without this flag is a re-render without the unsaved
+  // proposals — which charged somebody a second billed call for pressing Reject with an
+  // empty reason and reading the refusal that says so. They are not stored to survive it
+  // (F3); they are asked for again, off the memo, at no cost.
+  const proposing = Boolean(asked);
+  const suggested = proposing
     ? await write<{ proposals: Proposal[] }>(
-        asConfigured(`/proposals/${encodeURIComponent(table)}`),
+        `/proposals/${encodeURIComponent(table)}`,
         {},
       )
     : null;
@@ -102,7 +110,6 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
           <AuthorField
             table={table}
             copy={desk.copy}
-            configuration={engineer}
             judge={judge}
           />
 
@@ -118,7 +125,7 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
               <span className="compiled-hint">{desk.copy.compiled_caveat}</span>
             </div>
 
-            <Selection table={table} cap={desk.cap} copy={desk.copy}>
+            <Selection table={table} cap={desk.cap} copy={desk.copy} proposing={proposing}>
               <ul className="bulk-list">
                 {proposals.map((proposal) => (
                   <Row
@@ -127,6 +134,7 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
                     token={specToken(proposal)}
                     item={proposal}
                     copy={desk.copy}
+                    proposing={proposing}
                   />
                 ))}
                 {waiting.map((rule) => (
@@ -136,6 +144,7 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
                     token={ruleToken(rule.rule_id)}
                     item={rule}
                     copy={desk.copy}
+                    proposing={proposing}
                   />
                 ))}
               </ul>
@@ -179,6 +188,7 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
                   token={ruleToken(rule.rule_id)}
                   item={rule}
                   copy={desk.copy}
+                  proposing={proposing}
                 />
               ))}
             </ul>
@@ -238,11 +248,13 @@ function Row({
   token,
   item,
   copy,
+  proposing,
 }: {
   table: string;
   token: string;
   item: Proposal | Rule;
   copy: Workbench["copy"];
+  proposing: boolean;
 }) {
   const stored = "rule_id" in item ? item : null;
   return (
@@ -286,6 +298,11 @@ function Row({
         <form className="actions" action={judge}>
           <input type="hidden" name="table" value={table} />
           <input type="hidden" name="pick" value={token} />
+          {/* B31 · what the person was looking at, so a refused judgment can put it back.
+              A rejection with no reason is REFUSED — correctly — and the refusal used to
+              return to a screen with no proposals on it, charging a second billed call
+              for the privilege of reading it. */}
+          {proposing ? <input type="hidden" name="propose" value="1" /> : null}
           <label>
             {copy.reason_label}
             <input type="text" name="reason" autoComplete="off" />
@@ -302,7 +319,7 @@ function Row({
           ))}
         </form>
 
-        {stored ? <Amend table={table} rule={stored} copy={copy} /> : null}
+        {stored ? <Amend table={table} rule={stored} copy={copy} proposing={proposing} /> : null}
       </div>
     </li>
   );
@@ -321,11 +338,24 @@ function Row({
  * Which door renders is decided by whether the configuration arrived at all, so it is
  * the same Rev 0.4 mechanism as the pane itself rather than a second role check.
  */
-function Amend({ table, rule, copy }: { table: string; rule: Rule; copy: Workbench["copy"] }) {
+function Amend({
+  table,
+  rule,
+  copy,
+  proposing,
+}: {
+  table: string;
+  rule: Rule;
+  copy: Workbench["copy"];
+  proposing: boolean;
+}) {
   return (
     <form className="amend" action={revise}>
       <input type="hidden" name="table" value={table} />
       <input type="hidden" name="ruleId" value={rule.rule_id} />
+      {/* B31, on the fourth control. An amendment is refused for a configuration that
+          does not compile, and that refusal used to take the proposals with it. */}
+      {proposing ? <input type="hidden" name="propose" value="1" /> : null}
       {rule.configuration ? (
         <label>
           {copy.reconfigure}

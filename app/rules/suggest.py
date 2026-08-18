@@ -40,6 +40,17 @@ WHAT IT DELIBERATELY DOES NOT DO: rank, score, or filter out the business-naive 
 meaning is not in the sample (LT-2b), so the countermeasure is the evidence line plus a
 human (F12) — not a cleverer filter that would be wrong more quietly.
 
+HOW MANY IT PROPOSES IS NOT THIS MODULE'S NUMBER. `limit` is an argument on every
+function that has an opinion about the count, and its one caller passes
+`app/rules/store.py::BULK_CAP` — the same number the screen prints on the bulk control
+and the same one `judge_batch` refuses a selection past. It used to be a constant here,
+and the two drifted: this module asked for TEN while the screen promised EIGHT and
+explained itself with "every evidence line is on screen when you press it", which is the
+ARGUMENT for why bulk accept is safe rather than a preference about list length. A
+sentence that stops being true at the tenth proposal stops being true exactly when it
+matters. The number lives with the module that refuses one past it; the prompt, the
+slice and the copy all take it as an argument.
+
 ponytail: the model is asked ONCE and its reply is used or refused — no retry, no repair
 prompt, no second call to fix a malformed rule, so one bad rule costs the whole $0.04
 batch. The upgrade path is a retry at the call site, and it stays unbuilt until a real
@@ -66,11 +77,6 @@ from app.rules.validator import NOT_IN_CATALOG, RuleRejected, sanity
 PROPOSED = "proposed"
 
 SEPARATOR = " · "
-
-# How many rules to ask for. Not a model limit — a REVIEW limit. INV-1 gives a domain
-# expert five minutes to act on a table's proposals, and LT-1b prices a full-catalog run
-# at 13.97 s; ten is what fits both without a scroll.
-MAX_PROPOSALS = 10
 
 SYSTEM = (
     "You propose data quality rules for a database table from its statistics. "
@@ -140,11 +146,13 @@ class Proposal:
 # inferred from. Five minutes is also the budget INV-1 gives one table's review.
 MEMO_SECONDS = profile.CACHE_SECONDS
 
-_MEMO: dict[str, tuple[float, tuple[Proposal, ...]]] = {}
+_MEMO: dict[tuple[str, int], tuple[float, tuple[Proposal, ...]]] = {}
 
 
-async def for_table(table: str) -> tuple[Proposal, ...]:
-    """Profile `table`, ask the model for rules, hand back proposals. Saves nothing.
+async def for_table(table: str, limit: int) -> tuple[Proposal, ...]:
+    """Profile `table`, ask the model for at most `limit` rules, hand back proposals.
+
+    Saves nothing.
 
     Three steps, and the split is what makes the rest of this testable without spending
     money: the profile is cached (F2), the model call is the one billed line, and
@@ -163,24 +171,33 @@ async def for_table(table: str) -> tuple[Proposal, ...]:
     ponytail: a module-level dict with a timestamp, exactly like `profile.of`. No
     eviction, no size bound, no lock. Ceiling: one entry per table for five minutes, in
     a single-process demo server. The upgrade path is the same one that module names.
+    The key carries the limit as well as the table, so a memo cannot answer a request
+    for eight with a batch of ten somebody asked for first.
     """
-    memoised = _MEMO.get(table)
+    memoised = _MEMO.get((table, limit))
     if memoised is not None and time.monotonic() - memoised[0] < MEMO_SECONDS:
         return memoised[1]
 
     profiled = profile.of(table)
-    reply = await model.ask_json(_prompt(profiled), SYSTEM)
-    made = proposals(profiled, reply.data)
-    _MEMO[table] = (time.monotonic(), made)
+    reply = await model.ask_json(_prompt(profiled, limit), SYSTEM)
+    made = proposals(profiled, reply.data, limit)
+    _MEMO[(table, limit)] = (time.monotonic(), made)
     return made
 
 
-def proposals(profiled: profile.TableProfile, reply: Mapping[str, Any]) -> tuple[Proposal, ...]:
+def proposals(
+    profiled: profile.TableProfile, reply: Mapping[str, Any], limit: int
+) -> tuple[Proposal, ...]:
     """A parsed model reply in, proposals out. Pure — no database, no model, no store.
 
     Raises `RuleRejected` for a reply with no rules in it rather than returning an empty
     tuple, for the same reason `app/model.py` refuses to return `{}`: on a review screen
     "no proposals" reads as "this table needs no rules", which is a claim nobody made.
+
+    `limit` is enforced HERE as well as being asked for in the prompt, because a prompt
+    is a request and this is the only thing that makes the count true: a model that
+    replies with twelve is a reply, not an error, and the eleventh proposal on that
+    screen is one the bulk control's own sentence has stopped covering.
     """
     rules = reply.get("rules")
     if not isinstance(rules, list) or not rules:
@@ -189,7 +206,7 @@ def proposals(profiled: profile.TableProfile, reply: Mapping[str, Any]) -> tuple
             "reads on screen as 'this table needs none', so it surfaces as a failure instead."
         )
     columns = frozenset(column.name for column in profiled.columns)
-    return tuple(_proposal(profiled, columns, rule) for rule in rules[:MAX_PROPOSALS])
+    return tuple(_proposal(profiled, columns, rule) for rule in rules[:limit])
 
 
 def _proposal(profiled: profile.TableProfile, columns: frozenset[str], rule: Any) -> Proposal:
@@ -244,7 +261,7 @@ def evidence(profiled: profile.TableProfile, column: str | None) -> str:
     return SEPARATOR.join(parts)
 
 
-def _prompt(profiled: profile.TableProfile) -> str:
+def _prompt(profiled: profile.TableProfile, limit: int) -> str:
     """Everything the model is given — and it is a bounded string by construction.
 
     SPEC §3.1: aggregate statistics and a bounded sample, never full table contents. The
@@ -275,7 +292,7 @@ The only check types you may propose, with their parameters (required first, [op
 brackets) and the sentence each one turns into:
 {menu}
 
-Propose at most {MAX_PROPOSALS} rules for this table. Prefer a rule a business owner would
+Propose at most {limit} rules for this table. Prefer a rule a business owner would
 recognise as an invariant over one that merely restates the statistics above. Reply with
 exactly this JSON object:
 {{"rules": [{{"type": "<a type from the list above>", "kwargs": {{...}}}}]}}

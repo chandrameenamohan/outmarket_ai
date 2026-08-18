@@ -37,7 +37,7 @@ import pytest
 from fixtures_f13 import PENDING_ROW, ROW, RUN_MS, SETTLED_ROW, start_run
 
 from app.dq import status
-from conftest import Driver
+from conftest import Driver, choose_role
 
 pytestmark = pytest.mark.e2e
 
@@ -253,8 +253,8 @@ def test_failure_shows_english_statement_count_proportion_and_real_values(
     )
 
 
-def test_raw_panel_is_collapsed_on_first_paint(driver, record, record_id) -> None:
-    """The framework's own output is there, and it is shut.
+def test_raw_panel_is_the_engineers_and_is_shut_on_first_paint(driver, record, record_id) -> None:
+    """The framework's own output is there for the engineer, and it is shut.
 
     SPEC F13 wants the raw result available and not in the way. Asserted on the ABSENCE
     OF THE `open` ATTRIBUTE rather than on anything visual: attribute presence is
@@ -264,7 +264,16 @@ def test_raw_panel_is_collapsed_on_first_paint(driver, record, record_id) -> Non
     Both halves are load-bearing. A page with no raw panel at all would pass a check
     that only looked for open ones — and INV-4's fallback, the thing a reader reaches
     for when our reading of the result is not enough, would be gone.
+
+    IT CHOOSES A ROLE NOW, AND THAT IS BEAD dq-220. It used to arrive cold, which is the
+    domain expert's view (web/app/role.ts), and assert the panel was present — the F13
+    clause and the F12 Rev 0.4 clause pointing opposite ways on one screen, with this
+    check holding the losing end. The panel belongs to the engineer; the domain expert's
+    document does not contain it at all, which is asserted on the RAW response next door
+    (tests/e2e/test_framework_absence.py) because a DOM assertion after hydration is
+    satisfied by an element somebody hid.
     """
+    choose_role(driver, "engineer")
     driver.goto(f"/runs/{record_id}")
     driver.page.wait_for_load_state("networkidle")
 
@@ -278,7 +287,7 @@ def test_raw_panel_is_collapsed_on_first_paint(driver, record, record_id) -> Non
     assert not any(panels), (
         f"{sum(panels)} of {len(panels)} raw panels are open on first paint. Collapsed by "
         "default is the whole arrangement — the framework's output is the fallback, not the "
-        "first thing a domain expert meets."
+        "first thing an engineer meets."
     )
 
 

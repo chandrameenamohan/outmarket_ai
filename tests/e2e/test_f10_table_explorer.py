@@ -36,6 +36,10 @@ from conftest import Driver, choose_role
 
 pytestmark = pytest.mark.e2e
 
+# What `seed/seed_demo_data.py` planted, as `seed/MANIFEST.md` records it. Written here
+# rather than read from the schema, because reading the schema is the thing under test.
+DEMO_TABLES = frozenset({"customers", "orders", "payments"})
+
 
 def _path(driver: Driver) -> str:
     """Where the browser actually is, with the origin and any query stripped off."""
@@ -137,6 +141,35 @@ def test_an_errored_or_sampled_table_lands_in_bucket_two(driver, api_url, covera
     assert atom is not None and atom.inner_text() == record.atom, (
         f"the row's verdict reads {atom and atom.inner_text()!r}; the record says {record.atom!r}. "
         "The atom is composed once, server-side, and rendered — never recomposed here."
+    )
+
+
+def test_the_front_door_lists_the_demo_dataset_and_nothing_else(driver, api_url, coverage_records):
+    """The engineer is invited to care about the seeded tables, and about nothing else.
+
+    `lt1a_probe` — a 100-row leftover from learning test LT-1a — reached the deployed
+    coverage screen as a fourth row (bead dq-5da). The demo dataset is a deliberate
+    artefact (`seed/MANIFEST.md`, SPEC F15), and a probe wandering into it makes the
+    whole thing read as somebody's scratch database rather than as a case study.
+
+    ASSERTED ON THE DOM AND NOT ON THE PAYLOAD, which is the one thing this layer can
+    add: `test_zero_coverage_tables_sort_first` already pins the screen to what the
+    server sent, and `tests/test_schema_discovery.py` pins the server to the three
+    seeded tables. This is the end of that chain — what a person actually sees — and
+    it fails if the exclusion is lost at either end.
+
+    An equality, so it fails on a missing table as loudly as on an extra one: a filter
+    that hid the demo would otherwise be the quietest possible pass.
+    """
+    choose_role(driver, "engineer")
+    driver.goto("/tables")
+    driver.page.wait_for_load_state("networkidle")
+
+    rendered = {name for bucket in status.BUCKET_IDS for name in _rows(driver, bucket)}
+    assert rendered == DEMO_TABLES, (
+        f"the front door lists {sorted(rendered)}; the seeded demo is {sorted(DEMO_TABLES)}. "
+        "A table nobody planted is a table the engineer is being asked to vouch for by "
+        "mistake — and a missing one is a coverage view with a hole in it."
     )
 
 

@@ -55,6 +55,8 @@ from great_expectations.expectations.registry import (
 )
 from pydantic.v1 import ValidationError
 
+from app.db import unreachable
+
 # The one context for this process. Module level is load-bearing — see above.
 # `ephemeral` writes nothing to disk: no project directory appears, so there is
 # no new state to gitignore and nothing to clean up between runs (LT-1a).
@@ -99,7 +101,7 @@ class Rejected(ValueError):
     """
 
 
-class Unavailable(RuntimeError):
+class Unavailable(unreachable.Unreachable):
     """The database the rules run against could not be reached. Not a rule failure.
 
     Kept distinct from `Rejected` because the two have different audiences: a
@@ -298,7 +300,7 @@ def _source() -> Any:
                 connection_string=dsn.replace("postgresql://", "postgresql+psycopg2://", 1),
             )
         except ConnectionError as exc:
-            raise Unavailable(f"{DSN_VAR} did not answer: {exc}") from exc
+            raise Unavailable.not_answering(DSN_VAR, exc) from exc
     return _SOURCE
 
 

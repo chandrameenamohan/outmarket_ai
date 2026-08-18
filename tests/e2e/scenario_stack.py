@@ -83,9 +83,17 @@ WEB_BOOT_SECONDS = 120
 # The `uv run` line VERIFICATION.md §1 documents and `make check-ge` uses. Great
 # Expectations, SQLAlchemy and psycopg2 are not in the interpreter running the gate; uv
 # resolves this set from its cache in well under a second once warm.
+#
+# THE FOURTH `--with` IS NOT OPTIONAL AND WAS MISSING. `--no-project` means the ephemeral
+# environment inherits no site-packages, and `app/api/server.py` reaches `app/model.py`
+# through `desk -> authoring`, so the process died on `ModuleNotFoundError: No module
+# named 'claude_agent_sdk'` before it bound a socket — which surfaced as all seven checks
+# that boot their own stack ERRORING on "the Python process never answered", naming the
+# symptom and not the cause. Pinned to the version `Dockerfile.api` pins, and for the
+# same reason (LT-2b measured the sandbox against exactly this one).
 API_ARGV = (
     "uv run --no-project --with great-expectations --with sqlalchemy>=2 "
-    "--with psycopg2-binary python3 -m app.api.server"
+    "--with psycopg2-binary --with claude-agent-sdk==0.1.23 python3 -m app.api.server"
 ).split()
 
 WEB_ARGV = ["npm", "--prefix", "web", "run", "start"]

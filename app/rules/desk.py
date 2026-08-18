@@ -133,6 +133,12 @@ async def proposals(table: str, configuration: bool = False) -> dict[str, Any]:
     proposal was true of every row it saw and still wrong about the business, so the
     numbers are the only thing that shows a reviewer which is which.
 
+    HOW MANY ARE ASKED FOR IS `store.BULK_CAP`, HANDED OVER. The generator owns no count
+    of its own — it asked for ten while this screen's own sentence promised eight, and
+    the sentence is the argument for why bulk accept is safe rather than a note about
+    list length. One number, from the module that refuses a selection past it, reaching
+    the prompt, the slice and `copy()` below.
+
     A PROPOSAL THE TABLE ALREADY HAS IS DROPPED, and the comparison is between COMPILED
     specs rather than between what the model typed: the store holds the framework's own
     normalisation (`min_value=0` as `0.0`), so comparing raw kwargs would re-offer a rule
@@ -140,7 +146,7 @@ async def proposals(table: str, configuration: bool = False) -> dict[str, Any]:
     again is not merely noise — accepting it twice writes two rules that check the same
     thing, and coverage then counts a table as better protected than it is.
     """
-    made = await suggest.for_table(table)
+    made = await suggest.for_table(table, store.BULK_CAP)
     held = {_key(rev.spec) for rev in store.current(store.revisions(table=table))}
     rendered = []
     for proposal in made:

@@ -2,23 +2,46 @@
 
 **Read this first.** It exists so a fresh session can resume without re-deriving anything.
 
-Last updated: 2026-08-18 · **at close-out.** Every bead an agent can finish is finished. **The
-product is built:** all fifteen SPEC features have shipped, **41 of 46 beads are closed**, six of the
-seven epics are closed, and both halves of the gate run against real processes — `make check` is
-**187 passed, 0 skipped**, `make check-ui` drives a real Chromium over a real Next process in front
-of a real Python process against the real seeded Supabase database, and `make check-ge` runs 33
-checks against the real database. Fourteen PRs are merged.
+Last updated: 2026-08-18 · **after the live-deployment defect wave.** All fifteen SPEC features have
+shipped, **47 of 52 beads are closed, all seven epics are closed**, and the product is
+**deployed**:
 
-**EVERYTHING THAT IS LEFT NEEDS THE AUTHOR. There is no next agent task.** Five beads are open and
-they reduce to two human acts:
+| | |
+|---|---|
+| app | https://web-production-d242f.up.railway.app |
+| api | https://api-production-3d8d9.up.railway.app |
 
-1. **Look at six PNGs and `git add` them.** `dq-vix`, `dq-dkq` and `dq-zyt` are all held by the same
-   last criterion, and it is the one no machine may satisfy. The engineering under them is done and
-   proven: the six visual states now photograph a fixed demo store and came out **byte-identical
-   across two independent runs** (md5s in `dq-vix`'s notes, taken 2026-08-18), so **zero** states
-   pend for data dependence. What they pend for is approval. §9 lists the six files.
-2. **Stand up a deployed URL.** `dq-cyi.1`, and its parent epic `dq-cyi` stays open behind it rather
-   than closing around it. It needs hosting with a bill and an account attached. §9 has the detail.
+Two Railway services from this repo, each with its own Dockerfile.
+
+> ### ⚠ THE LIVE URLS DO NOT CARRY THE FIXES IN THIS WORKING TREE.
+> The deployment was built from `ea9a179`. **A hostile QA pass against it found four defects, all
+> four are fixed here, and none of them is deployed.** Nothing in this repository should be read as
+> a description of what the live URLs currently do. **The lead redeploys after review** — §9 item 3
+> lists exactly what the live site still does wrong, and `git log ea9a179..` is the difference.
+
+**The gate, re-measured at close-out on 2026-08-18 (§2 has the block):** `make check` **201 passed,
+0 skipped, exit 0**; `make check-ge` **33 passed, exit 0**; the browser layer **63 passed, 2 failed,
+2 skipped**, and both failures are two visual baselines that the fixes below genuinely changed —
+they need a person's eye, which is the one approval no agent may give.
+
+**What is left is FIVE beads and it is not all human work any more.** One act needs the author, the
+rest is engineering:
+
+1. **Look at two PNGs and `git add` them.** All six baselines were approved by the author in
+   `2781c1f`, so the visual layer now genuinely compares — four states pass. Two no longer match
+   because the screens honestly changed: `tables-three-buckets` lost `lt1a_probe` (`dq-5da`) and
+   `run-record-in-flight` lost the domain expert's `<details>` panels (`dq-220`). §9 has both.
+   `dq-vix` and `dq-dkq` are held by nothing else. **No agent may do this one.**
+2. **`dq-8zj`, and it is engineering rather than a decision.** It is the one thing keeping `dq-220`
+   open: a proposal's checkbox carries its compiled `{type, kwargs}` into the domain expert's
+   document, because an unsaved proposal has no id to be addressed by. Measured, not argued —
+   `dq-220`'s notes have the byte counts.
+3. **`dq-mc0`**, filed at close-out: two concurrent browser-layer runs collide on the constant
+   schema `dq_scenario`. P3, and the third instance of one shape (§2, §6).
+
+**And one thing that is neither**: put `DEPLOYED_APP_URL` and `DEPLOYED_API_URL` in `.env`. The
+deployment check passed against the live URLs when they were exported by hand (`dq-cyi.1`), and
+pends by name on every run that has not been told where the deployment is.
 
 **The AI-usage write-up — a quarter of the grade — is written and its bead is closed:
 [`AI_USAGE.md`](./AI_USAGE.md) (`dq-803`).**
@@ -56,24 +79,40 @@ gate it depends on is kept; the loop driver is replaced by attended, one-task-at
 | 7.5 | Craft review | ✅ done inside wave 3 — it is why `VERIFICATION.md` says "after the craft pass" and why the eighth visual state was deleted rather than approved |
 | 9 | Provenance | ✅ **`AI_USAGE.md`** — the fourth deliverable, written 2026-08-17 from the fourteen PR bodies, the four learning tests, the bead close reasons and `bd memories`. Bead `dq-803`. See §9 |
 
-**Epics:** E1 `dq-5pb`, E2 `dq-yov`, E3 `dq-3bp`, E4 `dq-klv`, E5 `dq-rbf` and the UX epic
-`dq-j15` are **CLOSED** — six of the seven `bd` holds — each with
-its children's evidence in the close reason. **E6 `dq-cyi` is open on ONE child**, `dq-cyi.1`, the
-deployed URL — see §4. Its other three children, including `dq-cyi.4`, are closed.
+**Epics: all seven are CLOSED** — E1 `dq-5pb`, E2 `dq-yov`, E3 `dq-3bp`, E4 `dq-klv`, E5 `dq-rbf`,
+the UX epic `dq-j15`, and **E6 `dq-cyi`, which closed at this close-out on its last child**:
+`dq-cyi.1` stood up the two Railway services and
+`test_deployed_url_serves_the_smoke_route` PASSED against the live URLs in 167.75 s — the first time
+that check ran rather than pended. E6 being closed means the delivery promise is **kept**; it does
+not mean the deployed build is **correct**, and its close reason says so at length.
 
 ### The gate, today
 
 ```
-# 2026-08-18 08:50:29 IST — all three launched from one shell, at once, on one machine
-make check       187 passed, 0 skipped, 96 deselected, 2.88 s, exit 0
-                 ruff → ruff format → mypy (66 source files) → pytest → eslint + tsc
-make check-ge     33 passed, 250 deselected, 103.64 s, exit 0   (network + database)
-make check-ui     52 passed, 8 skipped, 223 deselected, 368.17 s, exit 0
+# 2026-08-18, close-out, after the four live-deployment defects were fixed
+make check       201 passed, 0 skipped, 103 deselected, 6.61 s, exit 0
+                 ruff → ruff format → mypy → pytest → eslint + tsc
+make check-ge     33 passed, 269 deselected, 199.79 s, exit 0   (network + database)
+browser layer     63 passed, 2 failed, 2 skipped, 237 deselected, 525.11 s, exit 1
                  real Chromium, two real processes, real Supabase, 6 real billed model calls
 ```
 
-All three were measured **running at the same time** (bead `dq-cyi.4`), which is now a supported
-thing to do and used to take both of the heavy ones red.
+**304 checks collected**, and the arithmetic is worth keeping visible because it is what catches a
+check that joined no layer: 201 default + 33 `ge` + 67 `e2e` + 6 `live` − 3 (`e2e` and `live` both)
+= 304.
+
+**The two browser-layer failures are the honest kind and neither is a code fault.**
+`tables-three-buckets` and `run-record-in-flight` are visual baselines photographed before this
+wave's fixes; the screens they photograph genuinely changed. **The layer is red until a person looks
+at two PNGs**, which is exactly what that check is for. §9 has both.
+
+**`make check-ge` was broken at close-out and is fixed.** As written it died with
+`ModuleNotFoundError: No module named 'claude_agent_sdk'` and `Interrupted: 7 errors during
+collection` in 0.76 s — a red target that had verified nothing. `-m ge` selects 33 checks, none of
+which asks a model, but pytest **imports every module under `testpaths` before it applies a
+marker**, and seven of them reach `app/model.py` through `suggest` / `authoring` / `app.api.server`.
+The recipe now carries `--with claude-agent-sdk==0.1.23`, the same `--with` `VERIFICATION.md` §1
+already calls load-bearing on the API process's line. With it: 33 passed, 199.79 s, exit 0.
 
 **`check-ge` and `check-ui` may be run AT THE SAME TIME** (bead `dq-cyi.4`). They used to share
 `DQ_SCHEMA=dq_check` and take each other red with nothing wrong with either; they now have a scratch
@@ -84,20 +123,43 @@ both guards and the green concurrent run. `make reset-scratch [ARGS=dq_check_ge]
 `make check-ui` also needs its two processes already running — the command lines are in
 `VERIFICATION.md` §1, and the API one must carry `DQ_SCHEMA=dq_check` or the layer fails by name.
 
-**Zero skips in `make check`.** That number used to be 28 and every one of them was a `PENDING —`
-line naming what it waited for; they are all assertions now. The **eight** remaining skips are all in
-the browser layer and all of them are honest: six visual-regression states and two delivery
-targets. §9 says what a human has to do about them.
+**A THIRD SHARED-SCHEMA COLLISION, and it is not fixed** (`dq-mc0`, P3, filed at close-out).
+`check-ge` and `check-ui` no longer fight, but **two concurrent runs of `check-ui` still do**:
+`tests/e2e/scenario_stack.py::SCENARIO_SCHEMA` is the literal `dq_scenario` and SPEC §7 **drops it
+on the way in**, because §7 opens on "no rules exist". Right for one runner, wrong for two. Seen at
+close-out as `AssertionError: the store holds 3 rule(s) for orders after a screen of proposals` —
+an assertion that is exactly right and must not be loosened — while `dq_scenario` showed 19 rule
+revisions and 2 run records written by the *other* process inside the same 100 seconds. §7 passes
+alone (`1 passed in 170.18 s`). A marker cannot tell two processes apart, which is why `dq-cyi.4`'s
+fix does not reach this one.
 
-**Working tree, at close-out 2026-08-18.** All three build waves are **merged to `origin/main`** —
-PR #12 (wave 1), #13 (wave 2), #14 (wave 3) — and `main` is up to date with its remote. What is
-still uncommitted is the craft-pass and close-out work that landed after wave 3: `AI_USAGE.md`,
-`seed/seed_demo_rules.py`, `tests/fixtures_demo.py`, `tests/scratch.py`, the five new baseline PNGs
-and the re-shot `role-door.png`, plus edits to `HANDOFF.md`, `README.md`, `VERIFICATION.md`,
-`Makefile`, `pyproject.toml`, `.gitignore`, `app/db/roles.sql`, `tests/conftest.py`, three test
-files and three `web/app/` files. **Branching, committing and the PR are the author's, not an
-agent's** (§4a) — and for the six PNGs among them, `git add` is not merely process, it *is* the
-approval the visual layer waits for (§9).
+**Zero skips in `make check`.** That number used to be 28 and every one of them was a `PENDING —`
+line naming what it waited for; they are all assertions now. The **two** remaining skips are both in
+the browser layer and both honest, and they are now the *same* skip twice: nobody has named a
+deployed URL. `COMPOSE_APP_URL` and `DEPLOYED_APP_URL` are unset — and the second of those is a live
+Railway service that exists. §9.
+
+**A BUILT `web/.next` IS A SILENT LIAR, and it cost a full browser-layer run at close-out.**
+`npm --prefix web run start` serves whatever was last built; it does not notice that
+`web/app/api.ts` is newer than `web/.next/BUILD_ID`. A whole `-m e2e` pass was taken against a build
+that predated the fixes it was checking, and it went *green*, which is worse than red. It also
+produced a phantom defect — the not-found page appeared to offer the engineer's door to a domain
+expert — that vanished on a rebuild. **Rebuild before you believe a browser-layer result:**
+`find web/app -newer web/.next/BUILD_ID` answers the question in one line.
+
+**Working tree, at close-out 2026-08-18.** Everything through wave 4 is **merged to `origin/main`**
+— PRs #12–#15 — `main` is up to date with its remote, and **`ea9a179` is what Railway is serving.**
+What is uncommitted is **this wave: the four live-deployment defects.** Nine new files
+(`app/api/refuse.py`, `app/db/unreachable.py`, `web/app/framework.ts`, `web/app/not-found.tsx`,
+`DEMO.md`, and four test files) and edits to twenty-eight more, including eight `web/app/` files and
+nine test files. Two of them are worth naming here because they cut the other way from the rest:
+`tests/test_code_quality_thresholds.py` was **strengthened** (its web scan globbed `*.tsx` alone, so
+no `.ts` file was ever measured and `web/app/api.ts` reached **451 lines** while the size check
+reported green), and `Makefile` gained the `--with` that makes `check-ge` collect at all.
+**Branching, committing and the PR are the author's, not an agent's** (§4a).
+
+The six baseline PNGs are **committed** (`2781c1f`) and therefore approved. Two of them no longer
+match and are the author's next look (§9).
 
 ---
 
@@ -115,6 +177,8 @@ approval the visual layer waits for (§9).
 | **Demo RULE fixture** (bead `dq-vix`) | `seed/seed_demo_rules.py`, run by `make demo-fixture` — eight rules and two run records in the demo store `dq`. It is what the six visual baselines photograph, and **a reviewer needs it or the product looks broken while working perfectly** (`README.md`, "Run it") |
 | UX variants + judge scores | `design/README.md`, four self-contained HTML files; **the chosen one is `design/ux-variant-workbench.html`** |
 | **Architecture design doc** | https://claude.ai/code/artifact/97a3df0c-7ae3-4e8a-94fe-6e23e8b6f0f9 — problem framing, designs not chosen, risk register, Appendix D (AI-usage log — **should now point at `AI_USAGE.md`**; the artefact is hosted, so only the author can edit it) |
+| **The live deployment** | app https://web-production-d242f.up.railway.app · api https://api-production-3d8d9.up.railway.app — two Railway services, one Dockerfile each, built from `ea9a179`. **It does not carry this tree's fixes** (§9) |
+| Demo run of show | `DEMO.md` — nine minutes, seven beats, one browser; SPEC §7 performed rather than asserted, on `orders` and `payments` |
 | Task tracker | beads, prefix `dq` — `bd ready`, `bd list`, `bd show <id>` |
 | Credentials | `.env` (gitignored); shape documented in `.env.example` |
 | The author's workflow | `software_development_workflow.md`, `HOW_I_BUILD.md` |
@@ -140,6 +204,11 @@ approval the visual layer waits for (§9).
 | `app/dq/status.py` | all | **THE ONE WRITER** of verdicts, refusals, evidence lines and every load-bearing sentence |
 | `web/app/role.ts` | F11/F14 | role as a **cookie**, never a route segment |
 | `web/app/run/route.ts` | F13 | the one address the browser itself calls; a pass-through, never a poll |
+| `web/app/api.ts` | — | **the only file that knows the API's address.** Two doors out, `call()` and `stream()`, and one `fetch` between them, so neither can be the one without a `catch` |
+| `web/app/framework.ts` | F12 | **may this reader see the framework** — asked once, for every screen, by both doors above; and the redaction that makes the answer stick (`dq-220`) |
+| `web/app/not-found.tsx` | — | the one page whose job is to be somewhere to leave from. Reached by a mistyped id, not only a mistyped path |
+| `app/api/refuse.py` | — | every byte this server writes back, and the promise that it always writes some. 4xx caller / 503 database / 500 incurious (`dq-abs`) |
+| `app/db/unreachable.py` | — | what every module says when a database does not answer — the driver's words to the log, one neutral sentence to the reader |
 
 ---
 
@@ -150,40 +219,33 @@ approval the visual layer waits for (§9).
 bd ready
 ```
 
-**Five beads are open, they are the whole remaining ledger, and every one of them is the author's.**
-There is no agent-shaped work left in it: four are held by a human's eye on a PNG and the fifth by a
-hosting account. Nothing below was closed around, and nothing was `--force`d.
+**Five beads are open and three of them are agent-shaped.** Nothing below was closed around, and
+nothing was `--force`d. **Also set `DEPLOYED_APP_URL` and `DEPLOYED_API_URL` in `.env`** — not a
+bead, but it is why two checks still pend on every browser-layer run against a deployment that
+exists.
 
-- **`dq-cyi` · E6 — the delivery epic.** Open only because `dq-cyi.1` is. Three of its four children
-  are closed, `dq-cyi.4` among them. It closes when a deployment answers the smoke check that
-  already pends by name on every run.
-- **`dq-cyi.1` · B22 — a reviewer runs the product without our machine.** One criterion of three
-  is unmet: **no deployed URL exists.** The docker half is proven and recorded with its numbers in
-  `VERIFICATION.md` §8.1 (both images build clean in 1 m 52 s, the compose stack answers the same 21
-  hygiene cases, no credential is baked into either image). What remains is standing up both
-  processes somewhere and setting `DEPLOYED_APP_URL` **and** `DEPLOYED_API_URL` — the second is a
-  real cost of the topology, because `web/app/api.ts` reaches Python **server-side**, which is what
-  buys this product no CORS and no API base URL in the browser bundle. Read `README.md`,
-  "The IPv6 trap", before blaming the stack.
-- **`dq-vix` · B25 — a fixed demo fixture makes the data-dependent screens photographable.**
-  **The engineering is done and proven.** `seed/seed_demo_rules.py`, `make demo-fixture` and
-  `tests/fixtures_demo.py` are in the tree; `VERIFICATION.md` §4.3 had promised the states would
-  clear "with B23's fixed demo data", and B23 builds and **drops its own schema** by design, so that
-  promise had no owner until this bead. **Zero** states pend for data dependence now — `DATA_DEPENDENT`
-  is gone from `tests/e2e/test_ui_hygiene.py`, and two independent runs on 2026-08-18 (43.53 s, then
-  42.65 s) produced **byte-identical PNGs for all six states**, md5s recorded in the bead's notes.
-  What they pend for is the one thing a machine cannot supply: a person staging the PNG.
-- **`dq-dkq` · B28 — the role door earns its screen.** **Four criteria of five met**, re-measured
-  against the running app on 2026-08-18: document height at 1280×720 is exactly **720** (nothing
-  trails below the fold, nothing is cut off), the door offers the role choice **once** (two cards;
-  the header switch is 1 node in the HTML with 0 visible, out of the a11y tree and the tab order),
-  `/tables` keeps its toggle, and the behaviour layer is 6/6 green including
-  `test_role_is_never_a_route_segment`. The fifth criterion is the re-shot `role-door` baseline.
-- **`dq-zyt` — a re-shot baseline self-approved, and two graded documents said it could not.**
-  **The check is fixed** (`_approved()` asks `git diff --quiet` as well as `git ls-files`), and the
-  correction is written up in `VERIFICATION.md` §4.3 and `AI_USAGE.md` §6.2 rather than quietly
-  patched. The bead is still OPEN on its last criterion: a human's eye on the re-shot `role-door`
-  baseline.
+- **`dq-8zj` · P2 — the one piece of engineering left, and it is what holds `dq-220` open.**
+  A machine proposal has no row in the store (F3), so the checkbox that accepts one carries its
+  whole compiled spec as its value (`web/app/tables/[table]/rules/token.ts`). Measured off the
+  socket at close-out: `/tables/orders/rules?propose=1` as `dq-role=expert` is **562,768 bytes with
+  35 occurrences of `expect_column` and 35 of `kwargs`.** The door cannot strip it — taking
+  `type`/`kwargs` out would leave the domain expert a checkbox that accepts nothing. It needs a
+  **handle instead of a spec**, which is a change to the accept path. When it lands, add a
+  `?propose=1` entry to `tests/e2e/test_framework_absence.py`'s `QUERIES` so the propose screen
+  joins the raw-response check by mechanism rather than by memory.
+- **`dq-220` · P1 — open on `dq-8zj` and on nothing else.** Its own defect is fixed and proven: the
+  two `/runs` routes are clean, the stream door is clean, and the decision moved into one door
+  (`web/app/framework.ts`). Its acceptance is written in absolute terms — *no `expect_column`, no
+  `kwargs`, on any route* — and the numbers above say that is still false on one address, so it
+  stays open rather than closing around it. Full before/after byte table in its notes.
+- **`dq-vix` · B25 and `dq-dkq` · B28 — both held by the same two PNGs.** The engineering under
+  both is done and proven, and the approval they were waiting for has **happened**: all six
+  baselines are committed (`2781c1f`), four of the six compare and pass. Two do not, because this
+  wave's fixes changed the screens they photograph — `tables-three-buckets` and
+  `run-record-in-flight`, §9. Look at those two, `git add` them, re-run, and both beads close on
+  that output.
+- **`dq-mc0` · P3 — filed at close-out, not fixed.** Two concurrent browser-layer runs collide on
+  the constant schema `dq_scenario`. §2 has the evidence. It is the third instance of one shape.
 
 **Read `bd show <id>` before starting anything** — each bead carries its own acceptance, its check
 order (cheapest deterministic first), and an explicit out-of-scope list.
@@ -212,7 +274,7 @@ reopen.
 |---|---|
 | **The UI direction is `design/ux-variant-workbench.html` — "Diglot Workbench"** | The author's call, overriding the judge panel's preference for Run Ledger (23.0 against 25.4). Its idea is a **bilingual split**: plain English and the GE configuration as facing pages, warm paper tint for English, cool for the framework |
 | **SPEC amended to Rev 0.4 for it, rather than absorbed silently** | Workbench's facing panes are incompatible with F12's original *"collapsed by default"*. A frozen spec that quietly swallows an acceptance edit is worth less than no freeze, so the clause took a revision |
-| **The GE configuration is ABSENT for the domain expert, not collapsed** | The stronger form of the original intent. It is not `display: none` and not a disclosure control: the payload is not even asked for (`?configuration=1` is added only in the engineer's render), so view-source, a screen reader and a text browser all agree. A component deciding not to print a field it was handed is one refactor away from printing it |
+| **The GE configuration is ABSENT for the domain expert, not collapsed** | The stronger form of the original intent. It is not `display: none` and not a disclosure control: the payload is not even asked for, so view-source, a screen reader and a text browser all agree. A component deciding not to print a field it was handed is one refactor away from printing it. **Amended by `dq-220`:** asking is only half. The decision moved off the four pages that each made it — one of which forgot — into `web/app/framework.ts`, and the door STRIPS as well as not-asks, because `/records` sends the framework unasked and no query parameter would have protected the run screens |
 | **The time-budget indicator is grafted in from the Reviewer variant** | The judges scored Workbench 6.5/10 on expert usability, second-lowest of four, and proposed this graft themselves. It is what keeps INV-1's five minutes honest **on screen**, and its arithmetic has four unit checks. The other half of the graft is Reviewer's "Accept — I vouch for this" copy, which lives in `app/dq/status.py` |
 | **O-4 RESOLVED: NDJSON over one chunked POST** | One line of JSON per verdict, no Content-Length ever, `web/app/run/route.ts` passing the body through byte for byte. Not SSE (a GET-shaped protocol with reconnect semantics for a thing that must never be restarted) and not one request per rule (N connects to Singapore at 1.16 s each). **There is no address anywhere that answers "how is the run getting on"** — the only account of a run in flight is the response the caller is already reading, and a check fails the gate on a GET that reaches the run route |
 | **The first stream event is the whole rule list, before any rule runs** | That is the *mechanism* that makes a blank spinner impossible rather than merely discouraged, and it is what F13's progressive clause rests on. Measured: one validate of three rules costs 7.94 s and shows nothing until 7.94 s; three validates cost 12.64 s and the first verdict lands at 2.98 s. Progressive costs ~1.6× the total and buys the first verdict 2.7× sooner |
@@ -281,6 +343,41 @@ touching F8, F9 or F13. Summary:
   is the one that catches a stored non-rule — it is "one writer per schema", and that is what bead
   `dq-cyi.4` shipped: a schema per layer, derived from the markers rather than exported, plus a
   refusal for a process that collected both. The two run together green now (VERIFICATION §4.7.2).
+  **It has now happened a third time** and is still open: two *processes* of the same layer collide
+  on `dq_scenario`, which a marker cannot tell apart (`dq-mc0`, §2).
+
+**Found by a hostile QA pass against the LIVE deployment, 2026-08-18 — the four defects of this
+wave, and each one is a different way for a rule to be carried by convention:**
+
+- **An invariant carried by convention across four page types will be forgotten on the fourth**
+  (`dq-220`). SPEC F12 Rev 0.4 says the framework is ABSENT from the domain expert's document.
+  Three screens each read the role for themselves and asked for `?configuration=1` only for the
+  engineer; `/runs` and `/runs/<recordId>`, written later by someone who had read none of the other
+  three, did not — and served **both roles byte-identical HTML** with nine expectation
+  configurations folded into a `<details>`, the exact disclosure control Rev 0.4 deleted. The bead
+  named one leaking route; there were **two**. Three things the fix had to be: **one door**
+  (`web/app/framework.ts`, asked by both exits of `web/app/api.ts`, so a page cannot forget because
+  it is never asked); **stripping and not just not-asking**, because `/records` sends the framework
+  UNASKED and no query parameter would ever have protected the run screens; and **the stream is a
+  second door**, so redacting the page load alone would have left the record clean until somebody
+  pressed Run. The check reads `web/app/**/page.tsx` off the filesystem and asserts on the RAW
+  response, so a page written tomorrow is in it by existing.
+- **A refusal must not destroy the work it was protecting** (`dq-ee0`). Reject-with-no-reason gave
+  the *correct* refusal and took ten unsaved proposals — a ~25 s billed call — off the screen with
+  it. That is the tax that teaches people to fill the reason box with a full stop. The fix is not
+  persistence (F3 keeps proposals unsaved on purpose); it is one query parameter carried back, off
+  a five-minute memo. Reading the fix found the same loss on the **success** path and on **amend**.
+- **A private hostname reaches the reader through the gap where nothing answered** (`dq-abs`).
+  There was no 502 anywhere in this codebase: an exception left the handler, `ThreadingHTTPServer`
+  closed the connection with nothing written, and the **proxy** invented both the status and the
+  sentence — naming `api.railway.internal:8000`. Two structural fixes, neither per-route. And the
+  grep that looks for leaked hostnames **was blind**: every refusal is produced before a connection
+  is opened, so it only ever read bodies with no hostname available to leak.
+- **A number in UI copy can be an ARGUMENT, not a preference** (`dq-5da`). "Up to 8 at a time, so
+  every evidence line is on screen when you press it" is the reason bulk accept is *safe*; the
+  proposer held its own constant of ten. The cap now lives with the module that refuses a selection
+  past it and is passed as an argument, and the check is on the **call site**, because a check that
+  counted the output would go green on a literal `8` typed in beside the constant.
 
 ---
 
@@ -305,7 +402,18 @@ touching F8, F9 or F13. Summary:
 - **The IPv6 trap.** `db.<ref>.supabase.co` publishes AAAA records only and Docker Desktop gives
   containers no IPv6 route, so *"psql works from my laptop"* proves nothing about the container. The
   compose stack was verified against the **session** pooler (IPv4, 5432). The code's default is
-  unchanged. `README.md` has the detection and the fix.
+  unchanged. `README.md` has the detection and the fix. **It bites the make targets too:** both
+  `check-ge` and `check-ui` re-source `./.env` *inside* the recipe, so a pooler override exported in
+  your shell is overwritten and you get
+  `could not translate host name "db.<ref>.supabase.co" to address` from 24 checks at once. Source
+  the override where the recipe cannot reach it, or point `.env` at the pooler.
+- **`web/.next` is stale until you rebuild it, and it fails GREEN.** `npm --prefix web run start`
+  serves the last build and says nothing about it. `find web/app -newer web/.next/BUILD_ID` before
+  trusting any browser-layer result (§2).
+- **The `ge` layer's ephemeral env inherits no site-packages, and pytest imports before it filters.**
+  `-m ge` selects nothing that asks a model, but collection imports every module under `testpaths`
+  and seven reach `app/model.py`. That is why the `check-ge` recipe carries
+  `--with claude-agent-sdk==0.1.23`; without it the target dies at collection in under a second.
 - **`.claude/worktrees/` and the local `worktree-agent-*` branches belong to other sessions.** Never
   commit them, never `git add -A` blindly.
 - **A worktree or fresh clone has no `.env`** — `init.sh` fails loudly with the fix rather than
@@ -347,32 +455,22 @@ What made it writable at all was not documentation discipline at the end — it 
 every finding goes in the **PR body**, not only in the bead notes. Without that it would have been
 reconstruction, and it would have shown.
 
-Two runners-up remain, both of which need a **human**, not a session:
+Three runners-up remain. The first two are **five minutes of a human's attention each**; the third
+is the one that changes what the world sees.
 
-1. **Six visual baselines, all six written, none of them approved.** They are photographs of the
-   fixed demo store now (bead `dq-vix`), so nothing pends for data dependence any more and what is
-   left is the one thing a machine cannot supply: a person opening each PNG, deciding it is the
-   screen they meant, and `git add`-ing it.
+1. **Two visual baselines to look at — not six, and not for the reason §9 used to give.** All six
+   were approved by the author in `2781c1f`, so the visual layer genuinely compares now and **four
+   of the six pass**. Two do not, and neither is a defect: the screens changed, on purpose, in this
+   wave.
 
-   **These are the six files, and their md5s from two independent runs on 2026-08-18 — identical
-   both times, which is the proof that what you are looking at is a function of the code and not of
-   the database:**
+   | File under `tests/e2e/__baselines__/` | Route | Moved | Why |
+   |---|---|---|---|
+   | `tables-three-buckets.png` | `/tables` | over budget | `lt1a_probe` is no longer listed (`dq-5da`) |
+   | `run-record-in-flight.png` | `/runs/<demo record id>` | **4.46%** vs a **0.20%** budget | the domain expert's `<details>` panels are gone (`dq-220`), and the demo record was re-seeded |
 
-   | File under `tests/e2e/__baselines__/` | Route it photographs | md5, twice |
-   |---|---|---|
-   | `role-door.png` | `/` | `1bb3f3224d34c4fd435b2f07f28e8b36` |
-   | `tables-three-buckets.png` | `/tables` | `2e61ff139e2ed21d5ed7899f776b41f3` |
-   | `rules-facing-panes.png` | `/tables/orders/rules` | `ed9a0d4cef028e8996b5aedf8cc9ffcf` |
-   | `review-queue-with-caveat.png` | `/review` | `5dfe20c568f0f5c2925775a1d6a0d006` |
-   | `rule-permalink-standalone.png` | `/rules/<demo rule id>` | `052229a407febd0638c9b9a065a01911` |
-   | `run-record-in-flight.png` | `/runs/<demo record id>` | `9dc17883eb0d0ce9c12ac937e11a85cc` |
-
-   `role-door.png` is the one to look at hardest: it is TRACKED and MODIFIED, so you are choosing
-   between the committed door and the re-shot one (`git show HEAD:tests/e2e/__baselines__/role-door.png`
-   gets you the old picture). The other five are untracked and this is their first look.
-
-   Approving is `git add` on the files you accept. Then re-run the layer — those states stop
-   pending and start comparing, and `dq-vix`, `dq-dkq` and `dq-zyt` close on that output:
+   The fresh shot is written beside each as `<state>.actual.png`. Open it, decide whether that is
+   the screen you meant, `git add` the baseline, and re-run — `dq-vix` and `dq-dkq` close on that
+   output:
 
    ```bash
    # the two processes from VERIFICATION.md §1 must be up
@@ -380,21 +478,28 @@ Two runners-up remain, both of which need a **human**, not a session:
      python3 -m pytest -m e2e -k visual_regression -ra
    ```
 
-   **Read `VERIFICATION.md` §4.3 before you do it**, because the mechanism had a hole and this is the
-   bead that found it. `tests/e2e/__baselines__/role-door.png` is TRACKED — the path was added inside
-   `23ee9e1`, whose own message declares it deliberately untracked, so the staging reads like
-   `git add -A` rather than a decision. It is also MODIFIED: the working tree holds the re-shot door
-   from `dq-dkq`, which differs from the committed picture by **31.36% of its pixels against a 0.20%
-   budget**. Until bead `dq-zyt` was fixed, `_approved()` asked only whether the PATH was tracked, so
-   that state compared against a picture nobody had staged and passed. It now asks
-   `git diff --quiet` too, and `role-door` pends with the other five. **The harness has compared two
-   screenshots exactly once, and that comparison should not have been allowed to count.** No agent
-   may approve any of these; a machine approving its own photograph is the one habit that check
-   exists to prevent, and it got through once by a door nobody had checked.
-2. **There is no deployed URL** (`dq-cyi.1`). The docker path is proven and the smoke check for a
-   deployment already exists and pends by name — it fails rather than skips the moment
-   `DEPLOYED_APP_URL` points at something silent. Until someone stands one up, SPEC §3's promise is
-   half kept, and nothing in this repository should be read as saying otherwise.
+   **No agent may approve one**, and the door that used to let one through is shut and shown shut:
+   `_approved()` asks `git ls-files` **and** `git diff --quiet`, and at close-out that was driven by
+   hand — a committed baseline with one byte appended pends with the same sentence the untracked
+   case gets, and restores clean. `VERIFICATION.md` §4.3 and `AI_USAGE.md` §6.2 carry the correction
+   and the 31.36%-against-0.20% number that made it worth writing down. Bead `dq-zyt`, **closed**.
+
+2. **Name the deployment the checks are already asking for.** `dq-cyi.1` is closed —
+   `test_deployed_url_serves_the_smoke_route` PASSED against the live URLs in 167.75 s, the first
+   time it ran rather than pended — but that was with the variables exported **by hand for one
+   session**. `DEPLOYED_APP_URL` and `DEPLOYED_API_URL` are not in `.env`, so every browser-layer
+   run since prints `PENDING — DEPLOYED_APP_URL is unset — no deployment was named`. The check
+   **fails rather than skips** the moment the variable points at something silent, so putting them
+   in `.env` is what turns a one-session proof into part of every run.
+
+3. **THE FIXES IN THIS TREE ARE NOT DEPLOYED.** Railway is serving `ea9a179`. Until the lead
+   redeploys, the live app still: serves the Great Expectations configuration to a domain expert on
+   both `/runs` screens; answers a mistyped rule id with a **502 naming `api.railway.internal:8000`**;
+   destroys ten unsaved proposals when a rejection is refused; returns **10** proposals under copy
+   that promises 8; and lists `lt1a_probe` on the coverage screen. **A reviewer opening the live URL
+   is looking at the defects, not at the repository.** After the redeploy, re-run the hostile checks
+   against the deployment rather than assuming — the four beads' close reasons carry the exact
+   `curl` measurements to compare against.
 
 And one standing caution that has not expired: **the 14 s ceiling is not a decision with no expiry
 date.** O-3 is settled, but LT-1b's verdict was *not* "synchronous works" — a run stops being

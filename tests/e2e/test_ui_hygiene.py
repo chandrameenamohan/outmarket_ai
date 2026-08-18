@@ -45,6 +45,14 @@ ROUTES = [
     "/runs/RECORD_FIXTURE_ID",
 ]
 # The last two joined when LT-1b unblocked F13 (O-3: synchronous, progressive).
+#
+# EVERY ROUTE HERE ANSWERS 200, AND THAT IS A CONSTRAINT ON THE LIST, not a coincidence.
+# `/rules/not-a-uuid` and `/runs/not-a-uuid` now answer a real 404 with the not-found
+# page (bead dq-abs), which is correct HTTP — and Chrome logs "Failed to load resource:
+# the server responded with a status of 404" for the document itself, so adding one of
+# them here would take `test_console_is_clean` red for the browser doing its job. A
+# not-found route needs its own check with that entry allowed for, rather than a seventh
+# parametrisation of this one.
 
 HERE = pathlib.Path(__file__).parent
 AXE = HERE / "axe.min.js"  # vendored, MPL-2.0, banner intact — see the axe test
@@ -75,7 +83,14 @@ RECORD_PLACEHOLDER = "RECORD_FIXTURE_ID"
 # would photograph or audit the conservative view (web/app/role.ts). `/tables` is the
 # coverage dashboard, which the domain expert's render does not fetch at all; the rules
 # desk is F12's bilingual spread, and its second pane exists only here (SPEC Rev 0.4).
-ENGINEER_ROUTES = {"/tables", "/tables/orders/rules"}
+#
+# THE TWO RUN SCREENS JOINED WITH BEAD dq-220, and the reason is coverage rather than
+# tidiness. They used to render the same document for everybody — which was the bug: the
+# raw framework panel is the engineer's, and the domain expert's page does not contain it
+# at all now. Whichever role these checks arrive as, they audit ONE of the two documents,
+# and the engineer's is the superset: it is the expert's markup plus the `<details>`
+# panels, which nothing else puts under axe or under a layout-shift budget.
+ENGINEER_ROUTES = {"/tables", "/tables/orders/rules", "/runs", "/runs/RECORD_FIXTURE_ID"}
 
 
 def _settled(driver: Driver, route: str, rule_id: str, record_id: str) -> None:
