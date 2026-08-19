@@ -110,7 +110,11 @@ export function RunPanel({
         <span className="rec-meta" data-reported={reported} data-total={total} aria-live="polite">
           {reported} of {total} rules reported
         </span>
-        {finishedAt && !live ? <span className="rec-meta">{finishedAt}</span> : null}
+        {/* The mockup's rec-meta reads "persisted <time>" — the word is the claim (F9:
+            this row is a stored record, not a live report), so it travels with the
+            timestamp it qualifies. The record-level verdict chip and the pulsing
+            RUNNING dot stay out; both were removed deliberately (globals.css §F13). */}
+        {finishedAt && !live ? <span className="rec-meta">persisted {finishedAt}</span> : null}
         <span className="spacer" />
         <button className="btn primary" data-run onClick={run} disabled={live} aria-busy={live}>
           {recordId ? "Re-run → new record" : "Run → new record"}

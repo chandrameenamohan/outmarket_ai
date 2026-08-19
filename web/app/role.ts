@@ -39,29 +39,26 @@ const COOKIE = "dq-role";
 const REMEMBERED = 60 * 60 * 24 * 365;
 
 /**
- * The role this device chose, or `null` if it has not chosen one.
+ * The role this device is viewing as. The ENGINEER'S FULL VIEW IS THE DEFAULT — a
+ * device answers `expert` only after explicitly choosing it in the header.
  *
- * `null` is a real answer and not a missing one — `/` renders the door on it, which
- * is how "a one-click choice on entry" happens without an account.
+ * This inverts the original arrangement, by the author's call for the demo (bead
+ * dq-1rp, 2026-08-19): the app used to open on a who-is-looking door and default a
+ * cold arrival to the conservative expert view. Both halves cost the demo its first
+ * impression — a questionnaire before the product, and a landing where two of the
+ * four tabs led to a signpost. What the old default protected still holds where it
+ * matters: the expert VIEW, once chosen, carries no framework (SPEC F12 Rev 0.4 —
+ * `frameworkVisible()` reads this function) and no table list, and the choice is
+ * remembered the same way it always was.
  */
-export async function chosenRole(): Promise<Role | null> {
+export async function chosenRole(): Promise<Role> {
   const value = (await cookies()).get(COOKIE)?.value;
-  return value === "engineer" || value === "expert" ? value : null;
+  return value === "expert" ? "expert" : "engineer";
 }
 
-/**
- * What the body class says, for a request that has not chosen — and the reason the
- * default is `expert` rather than `engineer`.
- *
- * A cold permalink is the one arrival with no context at all: no cookie, no prior
- * navigation, someone else's link. Defaulting to the engineer view would show the
- * Great Expectations configuration to a reader who has not said they want it, which
- * is the single thing F12's amendment exists to prevent. Defaulting the other way
- * costs an engineer one click on a control that is already on screen — and then
- * remembers it forever.
- */
+/** The body class is the role, verbatim — the mockup's own mechanism. */
 export async function bodyClass(): Promise<string> {
-  return (await chosenRole()) === "engineer" ? "engineer" : "expert";
+  return chosenRole();
 }
 
 /**

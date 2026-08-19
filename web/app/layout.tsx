@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
+import { read, refused, type Coverage } from "./api";
 import { chosenRole, bodyClass, selectRole } from "./role";
+import { Tabs } from "./tabs";
 
 export const metadata: Metadata = {
   title: { default: "Data quality assistant", template: "%s · Data quality assistant" },
@@ -17,18 +20,14 @@ export const metadata: Metadata = {
  * exactly the person who may be in the wrong view, and F14 promises them a page they
  * can act on with no prior navigation.
  *
- * IT IS NOT OFFERED ON THE DOOR, which is the one screen that already asks the same
- * question in full. That subtraction is made in `globals.css` under `body:has(.doorway)`
- * and NOT here, and the reason is worth writing down because the obvious way round is
- * broken: this layout renders once per document and is then PRESERVED across every
- * navigation, so anything it decides from the route is decided once, on the route the
- * reader happened to land on. Both server-side arrangements were built and measured
- * against that. A parallel-route slot (`@toggle/default.tsx` + a `page.tsx` matching `/`)
- * left `/tables` with no switch at all after a reader walked through the door, because
- * a soft navigation keeps an unmatched slot's current state rather than falling back to
- * its default — six hygiene checks went red on it. A `usePathname()` wrapper re-renders
- * correctly but makes the shell of every route a client component to subtract one
- * control from one of them. See the `body:has(.doorway)` rule for what shipped.
+ * IT RENDERS ONCE PER DOCUMENT AND IS THEN PRESERVED across every navigation, so
+ * anything it decides from the route is decided once, on the route the reader happened
+ * to land on. Both server-side arrangements for route-aware chrome were built and
+ * measured against that, back when the role door needed the switch subtracted from one
+ * screen: a parallel-route slot left `/tables` with no switch after a soft navigation
+ * (six hygiene checks went red), and a `usePathname()` wrapper makes the shell of every
+ * route a client component. The door is gone (bead dq-1rp) but the constraint is not —
+ * it is why the tab bar below is its own client island rather than logic here.
  *
  * `body.expert` is the mockup's own mechanism, carried over verbatim: one class on
  * one element, and the configuration pane is not rendered (SPEC F12, Rev 0.4). It is
@@ -44,6 +43,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // cannot resolve an await inside a prop and prints a "please file an issue" line on
   // every lint run, which is noise in a gate whose whole value is that green means green.
   const view = await bodyClass();
+  // The tab bar's fallback table, so F12 and F13 are live before any table has been
+  // opened (bead dq-1rp: every tab clickable from the first paint). The first entry of
+  // the first bucket is the coverage order's own top pick — the payload decided, not
+  // this file. Server-to-server; the document carries one href, never the list.
+  const coverage = await read<Coverage>("/tables");
+  const fallbackTable = refused(coverage)
+    ? null
+    : (coverage.buckets.flatMap((bucket) => bucket.tables)[0]?.table ?? null);
   return (
     <html lang="en">
       <body className={view}>
@@ -53,6 +60,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <span className="glyph">¶ ⇄ {"{ }"}</span>
             <span className="sub">data-quality workbench</span>
           </div>
+          {/* The mockup's screen tabs, restored by the author's call (bead dq-448; the
+              component says what that decision cost and where). Suspense because
+              useSearchParams demands a boundary at build time; the fallback is nothing
+              for the frame of a hard load. */}
+          <Suspense fallback={null}>
+            <Tabs fallbackTable={fallbackTable} />
+          </Suspense>
           <form className="role-switch" action={selectRole}>
             <span className="cap" id="role-caption">
               Viewing as · a view, not an account

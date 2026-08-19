@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 import pytest
 from fixtures_f13 import RUN_MS, start_run
 
-from conftest import DOOR, Driver
+from conftest import Driver, choose_role
 
 pytestmark = pytest.mark.e2e
 
@@ -42,33 +42,32 @@ def _path(driver: Driver) -> str:
     return urlparse(driver.page.url).path
 
 
-# --- F11 · role door and the domain expert's door -----------------------------
+# --- F11 · the root address, and the domain expert's remembered choice --------
 
 
-def test_role_door_sends_domain_expert_to_review_and_remembers_it(driver) -> None:
-    """/ with no stored role -> role door. Click 'Domain expert' -> lands on /review,
-    NOT /tables. Reload -> still /review. Assert on driver.page.url, not on a class name.
+def test_root_opens_the_workbench_and_remembers_a_chosen_role(driver) -> None:
+    """/ with no stored role -> the full workbench at /tables. Choose 'Domain expert'
+    in the header -> / lands on /review from then on. Assert on driver.page.url.
 
-    The two halves are one check because neither is worth anything alone: a door that
-    routes correctly but forgets asks the question again on every visit, and a
-    remembered choice that routed to the wrong screen is worse than no memory at all.
+    The role DOOR that used to render here was removed by the author's call (bead
+    dq-1rp): for the demo, a cold arrival opens the product, not a questionnaire.
+    What this check keeps from its predecessor is the half that still matters — the
+    choice, made in the header now, is REMEMBERED, or it is a question every visit
+    rather than a role.
     """
     driver.goto("/")
-    assert _path(driver) == "/", "a device with no stored role must be asked, not guessed at"
-    assert driver.page.query_selector_all(".door button"), "no role door on / with no cookie"
-
-    driver.page.click(DOOR.format(role="expert"))
     driver.page.wait_for_load_state("networkidle")
-    assert _path(driver) == "/review", (
-        f"the domain expert landed on {_path(driver)}. Their door is the review queue; "
-        "/tables is the engineer's, and F11 says they never meet a table list."
+    assert _path(driver) == "/tables", (
+        f"a device with no stored role landed on {_path(driver)}. The demo default is the "
+        "full workbench (bead dq-1rp); the door that used to ask first is gone."
     )
 
+    choose_role(driver, "expert")
     driver.goto("/")
     driver.page.wait_for_load_state("networkidle")
     assert _path(driver) == "/review", (
-        f"returning to / asked again and left the browser at {_path(driver)}. The choice is "
-        "remembered on the device, or it is a question every visit rather than a role."
+        f"after choosing the domain expert, / left the browser at {_path(driver)}. Their "
+        "home is the review queue, and the choice is remembered on the device."
     )
 
 
@@ -126,9 +125,9 @@ def test_role_is_never_a_route_segment(driver) -> None:
     on one URL space, or every permalink forks in two.
 
     Both directions are asserted, and the second is the one that actually decays: it is
-    easy to keep the per-role paths unrouted and then have the ROLE DOOR navigate to
-    one. So this also walks through the door and checks the address it produced carries
-    no role in it.
+    easy to keep the per-role paths unrouted and then have the ROLE SWITCH navigate to
+    one. So this also chooses a role and checks the address it produced carries no role
+    in it.
     """
     forked = ["/eng/tables", "/engineer/tables", "/expert/review", "/expert/rules/anything"]
     resolved = [path for path in forked if (r := driver.goto(path)) is not None and r.status < 400]
@@ -137,11 +136,11 @@ def test_role_is_never_a_route_segment(driver) -> None:
         "sender's role to the receiver, which is exactly what F11 forbids."
     )
 
+    choose_role(driver, "engineer")
     driver.goto("/")
-    driver.page.click(DOOR.format(role="engineer"))
     driver.page.wait_for_load_state("networkidle")
     landed = _path(driver)
-    assert landed == "/tables", f"the engineer's door led to {landed}"
+    assert landed == "/tables", f"the engineer's home led to {landed}"
     assert not any(role in landed for role in ("engineer", "expert", "eng", "exp")), (
         f"choosing a role put it in the path: {landed}. The role is a cookie and a body "
         "class; the address is the same one the other role would have reached."

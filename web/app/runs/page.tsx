@@ -1,4 +1,5 @@
 import { read, refused, type RunView } from "../api";
+import { Rail } from "../rail";
 import { RunPanel } from "./panel";
 
 export const metadata = { title: "Runs" };
@@ -44,6 +45,8 @@ export default async function Page({ searchParams }: PageProps<"/runs">) {
 
   return (
     <>
+      <Rail />
+      <div className="railed">
       <div className="screen-head">
         <h1>What the last run found in {answer.table}</h1>
         <p className="who">
@@ -60,6 +63,7 @@ export default async function Page({ searchParams }: PageProps<"/runs">) {
         atom={answer.atom}
         pendingAtom={answer.pending}
       />
+      </div>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { read, refused, type RunView } from "../../api";
+import { Rail } from "../../rail";
 import { RunPanel } from "../panel";
 
 export const metadata = { title: "Run record" };
@@ -44,6 +45,8 @@ export default async function Page({ params }: PageProps<"/runs/[recordId]">) {
 
   return (
     <>
+      <Rail />
+      <div className="railed">
       <div className="screen-head">
         <h1>What this run found in {answer.record.table}</h1>
         <p className="who">
@@ -60,6 +63,7 @@ export default async function Page({ params }: PageProps<"/runs/[recordId]">) {
         atom={answer.atom}
         pendingAtom={answer.pending}
       />
+      </div>
     </>
   );
 }

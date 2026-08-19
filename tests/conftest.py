@@ -147,40 +147,33 @@ class Driver:
         return self.page.goto(self.base_url.rstrip("/") + route)
 
 
-# The role door's own buttons. Choosing a view is done by PRESSING one of them rather
-# than by writing the cookie into the context, which is a deliberate refusal to know
-# how the role is stored: `web/app/role.ts` owns that, and a check that wrote the
-# cookie itself would keep passing on the day the mechanism changed underneath it.
-DOOR = ".door button[value='{role}']"
-
-# The OTHER control that sets a role: the switch in the header, on every route. A device
-# that has already chosen never sees the door again — `/` redirects past it — so a check
-# that changes its mind mid-test has to use the same affordance a person would.
+# The one control that sets a role: the switch in the header, on every route. Choosing
+# a view is done by PRESSING it rather than by writing the cookie into the context,
+# which is a deliberate refusal to know how the role is stored: `web/app/role.ts` owns
+# that, and a check that wrote the cookie itself would keep passing on the day the
+# mechanism changed underneath it. (The role DOOR this helper used to press first was
+# removed with bead dq-1rp — a cold `/` now opens the workbench itself.)
 SWITCH = ".role-seg button[value='{role}']"
 
 
 def choose_role(driver: Driver, role: str) -> None:
     """Be `role` from here on, whether or not this context has chosen before.
 
-    Engineer-facing screens need it because the DEFAULT view is the domain expert's
-    (web/app/role.ts explains why a cold arrival gets the conservative one), so a fresh
-    context asking for `/tables` is a reader who has not said they want coverage — and
-    F10's dashboard is deliberately not in that document at all.
-
-    F12's desk needs the second half: it is the one screen BOTH users work on, so its
-    checks look at it twice, and the second `choose_role` in a test arrives at a `/` that
-    redirects to the role already chosen. Pressing the header switch instead is what a
-    person does, and it is the control F11 promises can be reached from any screen.
+    Expert-facing checks need it because the DEFAULT view is the engineer's full one
+    (bead dq-1rp — web/app/role.ts says why the demo opens open), so a fresh context
+    asking for the expert's screens is a reader who has not said so yet. Pressing the
+    header switch is what a person does, and it is the control F11 promises can be
+    reached from any screen.
     """
     driver.goto("/")
-    # Wait for `/` to FINISH before pressing anything on it. Without this the door's form
-    # submission can start while the page's own subresources are still in flight, and the
-    # browser cancels them — which `test_console_is_clean` records as a failed request and
-    # reports against whichever route the check was actually about. A race in the fixture
-    # that fails the screen is the worst kind of red.
+    # `/` redirects to the current role's home; wait for it to FINISH before pressing
+    # anything. Without this the switch's form submission can start while the page's own
+    # subresources are still in flight, and the browser cancels them — which
+    # `test_console_is_clean` records as a failed request and reports against whichever
+    # route the check was actually about. A race in the fixture that fails the screen is
+    # the worst kind of red.
     driver.page.wait_for_load_state("networkidle")
-    door = DOOR.format(role=role)
-    driver.page.click(door if driver.page.query_selector(door) else SWITCH.format(role=role))
+    driver.page.click(SWITCH.format(role=role))
     # Wait for the HEADER to agree, rather than for the network to go quiet. The switch is
     # a server action that re-renders the page it was pressed on, so "idle" can be true
     # again before the new document arrives — and the next navigation then carries the old

@@ -31,7 +31,7 @@ from typing import Any
 
 import pytest
 
-from conftest import REPO, Driver, choose_role, pending
+from conftest import REPO, Driver, pending
 
 pytestmark = pytest.mark.e2e
 
@@ -73,38 +73,17 @@ RULE_PLACEHOLDER = "RULE_FIXTURE_ID"
 RECORD_PLACEHOLDER = "RECORD_FIXTURE_ID"
 
 
-# Routes whose screen belongs to the ENGINEER. A fresh context has chosen no role and
-# therefore renders the domain expert's view (web/app/role.ts explains why that is the
-# conservative default), and F10's `/tables` deliberately has no coverage dashboard in
-# that view at all — F11: a domain expert never encounters a table list. A hygiene check
-# arriving cold would be photographing, and measuring, a signpost. So these walk through
-# the door first, by pressing it, exactly as a user does.
-# Routes whose screen is DIFFERENT for the engineer, so a check that arrived with no role
-# would photograph or audit the conservative view (web/app/role.ts). `/tables` is the
-# coverage dashboard, which the domain expert's render does not fetch at all; the rules
-# desk is F12's bilingual spread, and its second pane exists only here (SPEC Rev 0.4).
-#
-# THE TWO RUN SCREENS JOINED WITH BEAD dq-220, and the reason is coverage rather than
-# tidiness. They used to render the same document for everybody — which was the bug: the
-# raw framework panel is the engineer's, and the domain expert's page does not contain it
-# at all now. Whichever role these checks arrive as, they audit ONE of the two documents,
-# and the engineer's is the superset: it is the expert's markup plus the `<details>`
-# panels, which nothing else puts under axe or under a layout-shift budget.
-ENGINEER_ROUTES = {"/tables", "/tables/orders/rules", "/runs", "/runs/RECORD_FIXTURE_ID"}
-
-
 def _settled(driver: Driver, route: str, rule_id: str, record_id: str) -> None:
-    """Navigate and wait for the network to go quiet. Every check here starts here."""
-    if route in ENGINEER_ROUTES:
-        choose_role(driver, "engineer")
-        # THE ROLE DANCE IS NOT THE ROUTE UNDER TEST. Choosing a role posts a server action
-        # to `/` and then redirects, and the browser records the superseded request as a
-        # failure — intermittently, which is worse than always: it reports an error against
-        # whichever engineer route happened to lose the race. `/` has its own entry in
-        # ROUTES and its own console check, so nothing is lost by starting the recorders
-        # clean at the moment the navigation that matters begins.
-        driver.console_errors.clear()
-        driver.failed_requests.clear()
+    """Navigate and wait for the network to go quiet. Every check here starts here.
+
+    A fresh context renders the ENGINEER'S view since bead dq-1rp, and the engineer's
+    document is the superset everywhere it differs — the coverage dashboard, F12's
+    second pane, the raw framework panels (dq-220) — so these checks audit the fuller
+    of the two documents by arriving cold. The role dance that used to walk engineer
+    routes through the door first went with the door; pressing the switch to become
+    the role you already are posts a server action whose tail the next navigation
+    cancels, which the recorders report as a failed request against the wrong route.
+    """
     driver.goto(route.replace(RULE_PLACEHOLDER, rule_id).replace(RECORD_PLACEHOLDER, record_id))
     driver.page.wait_for_load_state("networkidle")
 
@@ -221,8 +200,10 @@ def test_accessibility_has_no_violations(
 #
 # A baseline that cannot fail while its neighbour passes asserts nothing its neighbour does
 # not, and approving both would have put a human signature on a duplicate.
+# `role-door` ("/") was a state here until bead dq-1rp removed the screen it
+# photographed: `/` is a pure redirect now, and a baseline of a redirect is a
+# photograph of whichever page it lands on — which two other states already hold.
 STATES = {
-    "role-door": "/",
     "tables-three-buckets": "/tables",
     # Renamed with bead dq-rbf.4. It was `rules-catalog-collapsed`, from F12's original
     # "collapsed by default" clause — which SPEC Rev 0.4 replaced with facing pages, so a
@@ -270,8 +251,9 @@ def _approved(baseline: pathlib.Path) -> bool:
     photographed. It stops being the whole story the moment the screen changes: overwriting
     an already-tracked baseline leaves the PATH tracked, so the next run compares the new
     shot against ITSELF and goes green over a picture nobody has looked at — the same habit
-    arriving through the second door, and it is not hypothetical (it is how `role-door.png`
-    passed once). `git diff --quiet` asks the question that actually matters — *is the
+    arriving through the second door, and it is not hypothetical (it is how the since-
+    removed `role-door.png` once passed). `git diff --quiet` asks what actually
+    matters — *is the
     CONTENT the staged content* — so a re-shot baseline pends with the same sentence the
     untracked case gets, and a re-approval costs a person the same look the first one did.
 
@@ -317,10 +299,11 @@ def test_visual_regression_against_committed_baseline(
     reason left to pend is that nobody has looked at the picture yet.
 
     THE TWO ID FIXTURES ARE RESOLVED PER ROUTE, NOT PER SIGNATURE. Requesting them by
-    signature made every state — `role-door` among them, whose route is `/` and holds
-    neither placeholder — depend on a demo store that no make target seeds, so the one
-    state with an approved baseline turned into a skip on a fresh clone. `getfixturevalue`
-    asks for an id only where a placeholder says a route names a thing.
+    signature made every state — the since-removed `role-door` among them, whose route
+    was `/` and held neither placeholder — depend on a demo store that no make target
+    seeds, so the one state with an approved baseline turned into a skip on a fresh
+    clone. `getfixturevalue` asks for an id only where a placeholder says a route names
+    a thing.
 
     ponytail: Pillow, imported inside the function, and a per-channel tolerance rather
     than a perceptual diff. Pillow is not a dependency of `make check` and must not

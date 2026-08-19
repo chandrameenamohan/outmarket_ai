@@ -23,7 +23,7 @@ from fixtures_f12 import BILLED_MS, DRAFT, PROPOSED, REFUSAL, RULES, answered, t
 from scenario_stack import Scenario
 
 from app.dq import status
-from conftest import DOOR, Driver, choose_role
+from conftest import Driver, choose_role
 
 # The desk's own two rows. Everything else this file reads is defined once next door and
 # imported — F12's addresses and its billed-call ceiling from `tests/fixtures_f12.py`
@@ -169,19 +169,29 @@ def step_4_the_second_user_acts_independently(
     store — F12 requires a rejection to capture why, and `app/rules/store.py` refuses a
     rejected revision that carries none.
     """
+    # The role door this step used to walk through was removed with bead dq-1rp; the
+    # expert now picks their role at the header switch, and `/` remembers it.
+    choose_role(driver, "expert")
     driver.goto("/")
-    driver.page.click(DOOR.format(role="expert"))
     driver.page.wait_for_load_state("networkidle")
     assert driver.page.url.endswith(
         "/review"
-    ), f"the domain expert's door led to {driver.page.url}; theirs is the review queue."
+    ), f"the domain expert's home led to {driver.page.url}; theirs is the review queue."
     assert flagged["statement"] in driver.page.inner_text("body"), (
         f"the flagged rule {flagged['statement']!r} is not waiting in the queue, which is the "
         "one place somebody's judgment was asked for."
     )
-    navigation = driver.page.query_selector_all("a[href], nav, select, [role='navigation']")
+    # Narrowed from "no navigation at all" when bead dq-448 restored the mockup's screen
+    # tabs to the topbar: the clause is about a TABLE list, and the tabs name screens.
+    # tests/e2e/test_f11_review_queue.py carries the full argument and the wider set of
+    # assertions; this step keeps §7.4's own line — nothing below the header navigates.
+    navigation = driver.page.evaluate(
+        """() => [...document.querySelectorAll("a[href], nav, select, [role='navigation']")]
+             .filter((e) => !e.closest('header.topbar'))
+             .map((e) => e.outerHTML)"""
+    )
     assert navigation == [], (
-        f"the queue carries navigation: {[e.evaluate('e => e.outerHTML') for e in navigation]}. "
+        f"the queue carries navigation outside the topbar's screen tabs: {navigation}. "
         "F11: a domain expert never encounters a table list, and a table name is a word."
     )
 
