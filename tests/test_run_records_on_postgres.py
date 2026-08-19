@@ -148,6 +148,37 @@ def test_rerun_creates_a_new_record_id_and_leaves_the_prior_record_intact() -> N
 
 
 @pytest.mark.ge
+def test_the_dashboard_reads_every_tables_newest_record_in_one_statement() -> None:
+    """`latest_per_table` is `latest` for every table at once, and they pick the same winner.
+
+    The coverage screen used to call `latest()` once per table — N sequential round
+    trips that measured ~1.5-1.7 s warm at three tables (bead dq-z4k) — so the single
+    `distinct on` read replaced it. What that read must not do is disagree with
+    `latest()` about which record is newest: the dashboard would render a different
+    run than the table's own screen. So it is asserted AGAINST `latest()`, per table,
+    rather than against a copy of its ordering — and across a re-run, so "newest" is
+    doing real work instead of matching the only record there is.
+    """
+    _, normalise, run, runs = _modules()
+
+    runs.save(SPECS, _payload(normalise, run, failing=True))
+    newest = runs.save(SPECS, _payload(normalise, run, failing=False))
+    elsewhere = runs.save(SPECS, _payload(normalise, run, failing=True, table="customers"))
+
+    everything = runs.latest_per_table()
+    assert everything[TABLE] == newest == runs.latest(TABLE), (
+        "the one-statement read and the per-table read disagree about which record is "
+        "newest. They order by the same two columns on purpose; this is that purpose."
+    )
+    assert (
+        everything["customers"] == elsewhere == runs.latest("customers")
+    ), "a second table's newest record did not survive the collapse into one statement"
+    assert all(
+        record.table == name for name, record in everything.items()
+    ), "a record came back keyed under a table it does not belong to"
+
+
+@pytest.mark.ge
 def test_an_incomplete_run_writes_no_record() -> None:
     """The streaming half of SPEC F9, against the real store.
 
@@ -263,9 +294,9 @@ def _collect(fn: Any, failures: list[BaseException]) -> None:
         failures.append(exc)
 
 
-def _payload(normalise: Any, run: Any, failing: bool) -> dict[str, Any]:
+def _payload(normalise: Any, run: Any, failing: bool, table: str = TABLE) -> dict[str, Any]:
     """A completed run's payload for `SPECS`, without going near the framework or the table."""
-    scan = normalise.Scan(TABLE, SEEDED_ROWS)
+    scan = normalise.Scan(table, SEEDED_ROWS)
     report = {
         "success": not failing,
         "results": [

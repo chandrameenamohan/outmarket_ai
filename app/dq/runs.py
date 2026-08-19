@@ -108,6 +108,17 @@ _READ = f"""
      limit 1
 """
 
+# The dashboard's read: every table's newest record in ONE statement. `distinct on`
+# keeps the first row per table under the same `finished_at desc, record_id desc`
+# ordering `_READ` uses, so the two readers cannot disagree about which record is
+# newest. One statement because the alternative was one `_READ` per table — N
+# sequential round trips that measured ~1.5-1.7 s warm for three tables (bead dq-z4k).
+_READ_ALL = f"""
+    select distinct on (table_name) {_COLUMNS}
+      from {{schema}}.runs
+     order by table_name, finished_at desc, record_id desc
+"""
+
 # `finished_at` is the database's to set, so it is read back rather than sent.
 _WRITE = """
     insert into {schema}.runs
@@ -276,6 +287,26 @@ def latest(table: str) -> Record | None:
     """
     found = _read(table=table)
     return found[0] if found else None
+
+
+def latest_per_table() -> dict[str, Record]:
+    """`latest()` for every table at once, in one round trip — the coverage screen's read.
+
+    `app/dq/coverage.py::listing()` needs the newest completed record for EVERY table,
+    and calling `latest()` per table billed the schema's table count in sequential
+    round trips: ~1.5-1.7 s warm at three tables (bead dq-z4k). This is the `select
+    distinct on (table_name)` that note named as the ceiling's exit, and it costs one
+    round trip whatever the table count.
+
+    Same completed-only semantics as `latest()` — only a completed run is ever written
+    (point 1 in the module docstring), so reading the table IS reading the completed
+    runs — and the same no-execution property: no path to the executor exists from
+    here. A table that has never been run is absent from the dict, the same fact
+    `latest()` states as None.
+    """
+    with system.cursor(DDL) as cur:
+        cur.execute(system.sql(_READ_ALL))
+        return {record.table: record for record in (_row(row) for row in cur.fetchall())}
 
 
 def find(record_id: str) -> Record:
