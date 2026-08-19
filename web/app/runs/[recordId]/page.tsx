@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { read, refused, type RunView } from "../../api";
-import { Rail } from "../../rail";
+import { StreamedRail } from "../../rail";
 import { RunPanel } from "../panel";
 
 export const metadata = { title: "Run record" };
@@ -45,7 +45,9 @@ export default async function Page({ params }: PageProps<"/runs/[recordId]">) {
 
   return (
     <>
-      <Rail />
+      {/* Streams (bead dq-9do): the record payload answers in well under a second and
+          the coverage read takes ~1.6 s — the page no longer waits for its margin. */}
+      <StreamedRail />
       <div className="railed">
       <div className="screen-head">
         <h1>What this run found in {answer.record.table}</h1>

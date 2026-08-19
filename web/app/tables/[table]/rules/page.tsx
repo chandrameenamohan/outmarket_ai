@@ -1,5 +1,5 @@
 import { read, refused, write, type Proposal, type Rule, type Workbench } from "../../../api";
-import { Rail } from "../../../rail";
+import { StreamedRail } from "../../../rail";
 import { chosenRole } from "../../../role";
 import { judge, propose, revise } from "./actions";
 import { AuthorField, Pick, Selection } from "./desk";
@@ -92,7 +92,9 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
 
   return (
     <>
-      <Rail />
+      {/* Streams (bead dq-9do): the workbench payload answers in well under a second
+          and the coverage read takes ~1.6 s — the desk no longer waits for its margin. */}
+      <StreamedRail />
       <div className="railed">
       <div className="screen-head">
         <h1>

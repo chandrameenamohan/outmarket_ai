@@ -28,13 +28,13 @@ keeps a hole out of the bucket labelled "the verdict is real".
 
 WHAT THIS MODULE DOES NOT DO. It words nothing. Every string it emits comes from
 `app/dq/status.py` — the atoms through `coverage_atom` / `Record.atom`, the bucket
-headings from `BUCKETS`. It also never triggers a run: `runs.latest()` reads the
-cache and has no path to the executor, which is what lets the engineer's front door
-cost three statements instead of fourteen seconds.
+headings from `BUCKETS`. It also never triggers a run: `runs.latest_per_table()`
+reads the cache and has no path to the executor, which is what lets the engineer's
+front door cost two statements instead of fourteen seconds.
 
 `arrange()` is pure and takes both halves as arguments, so the whole ordering
 argument — buckets, tie-breaks, the mockup's defect — is checkable in `make check`
-with no database at all. `listing()` is the two-line function that goes and gets
+with no database at all. `listing()` is the three-line function that goes and gets
 them.
 """
 
@@ -133,15 +133,17 @@ def arrange(
 def listing() -> dict[str, Any]:
     """The whole screen's payload: three buckets, and the sentence that explains the order.
 
-    ponytail: one `runs.latest()` per table, so a schema of N tables costs N+1 round
-    trips rather than 2. At the demo's three tables that is ~150 ms against Singapore,
-    and the alternative is a `select distinct on (table_name) ... order by table_name,
-    finished_at desc` — a second read statement in `app/dq/runs.py` whose only caller
-    would be this line. Ceiling: this is the first thing to change if the schema grows,
-    and the query above is the change.
+    This used to be one `runs.latest()` per table — N+1 round trips instead of 2 —
+    and the note here called that fine at three tables and named the `select distinct
+    on (table_name)` read as the ceiling's exit. The ceiling arrived early: not from
+    schema growth but from round-trip cost, GET /tables measuring ~1.5-1.7 s WARM
+    against Singapore with the N+1 the bulk of it (bead dq-z4k). So the named change
+    was made — `runs.latest_per_table()` is that read, and the screen now costs two
+    statements whatever the table count.
     """
     found = tables.tables()
+    records = runs.latest_per_table()
     return {
-        "buckets": arrange(found, {table.name: runs.latest(table.name) for table in found}),
+        "buckets": arrange(found, {table.name: records.get(table.name) for table in found}),
         "sort_note": status.SORT_NOTE,
     }

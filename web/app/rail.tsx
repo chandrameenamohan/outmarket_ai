@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { read, refused, type Coverage } from "./api";
 import { chosenRole } from "./role";
@@ -40,6 +41,58 @@ const DOT: Record<string, string> = {
   unverifiable: "unver",
   verified: "verif",
 };
+
+/**
+ * The rail, off the critical path (bead dq-9do). Every screen that rendered <Rail/>
+ * used to wait on its coverage read before the page could answer at all — ~1.6 s warm,
+ * against page payloads of 0.2–0.9 s, so the slowest thing on every engineer tab click
+ * was the CHROME. This wrapper streams it instead: the page flushes immediately with a
+ * same-width skeleton in the rail's column, and the real list replaces it when
+ * coverage answers. (/tables passes its own coverage in, so there the child resolves
+ * with the page and the skeleton never shows — one read, two renderings, unchanged.)
+ *
+ * THE ROLE CHECK LIVES OUTSIDE THE BOUNDARY, and that is the reason this wrapper is
+ * async rather than a bare <Suspense>. A static fallback would flash a rail at the
+ * domain expert, whose document must never CONTAIN one (F11 — the e2e asserts DOM
+ * absence, not invisibility). The check is a cookie read, effectively free, so it is
+ * settled before deciding whether a boundary exists at all: for anyone but the
+ * engineer there is no skeleton, no Suspense and no coverage call — the same
+ * subtraction Rail itself makes.
+ *
+ * THE SKELETON WEARS THE `.rail` CLASS, deliberately. `main:has(> .rail)` is what
+ * flips the page into its two-column layout, and it must hold from FIRST paint: a
+ * fallback without the class would render single-column and shove the content left
+ * when the rail arrived — the exact jump the 0.1 CLS budget
+ * (tests/e2e/test_ui_hygiene.py::test_no_layout_shift_on_first_paint) exists to catch.
+ */
+export async function StreamedRail({ coverage }: { coverage?: Coverage }) {
+  if ((await chosenRole()) !== "engineer") {
+    return null;
+  }
+  return (
+    <Suspense fallback={<RailSkeleton />}>
+      <Rail coverage={coverage} />
+    </Suspense>
+  );
+}
+
+/**
+ * Same column, same surface, nothing to read: holds the rail's 248px while the
+ * coverage read is in flight. `aria-hidden` because a placeholder has no content a
+ * screen reader should stop on — the labelled aside arrives with the data.
+ */
+function RailSkeleton() {
+  return (
+    <aside className="rail" aria-hidden="true">
+      <div className="rail-block">
+        <span className="skel-line" />
+        <span className="skel-line" />
+        <span className="skel-line" />
+        <span className="skel-line" />
+      </div>
+    </aside>
+  );
+}
 
 export async function Rail({ coverage }: { coverage?: Coverage }) {
   if ((await chosenRole()) !== "engineer") {

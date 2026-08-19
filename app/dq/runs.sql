@@ -71,7 +71,8 @@ create table if not exists {schema}.runs (
     finished_at timestamptz not null default now()
 );
 
--- The only query this table serves: the most recent record for one table.
+-- The only shape of query this table serves: the most recent record per table —
+-- for one table (_READ) or for all of them at once (_READ_ALL, bead dq-z4k).
 create index if not exists runs_newest_per_table
     on {schema}.runs (table_name, finished_at desc);
 

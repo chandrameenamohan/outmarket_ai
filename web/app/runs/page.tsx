@@ -1,5 +1,5 @@
 import { read, refused, type RunView } from "../api";
-import { Rail } from "../rail";
+import { StreamedRail } from "../rail";
 import { RunPanel } from "./panel";
 
 export const metadata = { title: "Runs" };
@@ -45,7 +45,9 @@ export default async function Page({ searchParams }: PageProps<"/runs">) {
 
   return (
     <>
-      <Rail />
+      {/* Streams (bead dq-9do): the record payload answers in well under a second and
+          the coverage read takes ~1.6 s — the page no longer waits for its margin. */}
+      <StreamedRail />
       <div className="railed">
       <div className="screen-head">
         <h1>What the last run found in {answer.table}</h1>
