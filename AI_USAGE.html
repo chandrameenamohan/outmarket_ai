@@ -1,0 +1,271 @@
+<title>How the Data Quality Assistant Was Built</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #FAFBF9;
+    --surface: #F1F4F0;
+    --ink: #1C2321;
+    --muted: #5C6B64;
+    --border: #DDE5DF;
+    --accent: #1A7F5A;
+    --accent-ink: #14624636;
+  }
+  :root:not([data-theme="light"]) { }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101613;
+      --surface: #171F1B;
+      --ink: #E6EDE8;
+      --muted: #93A49B;
+      --border: #263029;
+      --accent: #4CC38A;
+      --accent-ink: #4cc38a33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101613;
+    --surface: #171F1B;
+    --ink: #E6EDE8;
+    --muted: #93A49B;
+    --border: #263029;
+    --accent: #4CC38A;
+    --accent-ink: #4cc38a33;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 1.06rem;
+    line-height: 1.65;
+    margin: 0;
+  }
+  .wrap { max-width: 42rem; margin: 0 auto; padding: 4rem 1.25rem 5rem; }
+  h1, h2, h3 { font-family: "Archivo", "Helvetica Neue", Arial, sans-serif; text-wrap: balance; }
+  h1 { font-size: 2.1rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.75rem; }
+  h2 { font-size: 1.3rem; font-weight: 600; margin: 0 0 0.6rem; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 1rem;
+  }
+  .lede { font-size: 1.12rem; color: var(--muted); margin: 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 2rem;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 1.1rem 0; margin: 2.25rem 0 3rem;
+  }
+  .stat { display: flex; flex-direction: column; gap: 0.1rem; }
+  .stat b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.25rem; font-weight: 500; color: var(--ink);
+  }
+  .stat span { font-size: 0.78rem; color: var(--muted);
+    font-family: "Archivo", sans-serif; letter-spacing: 0.02em; }
+
+  section { display: grid; grid-template-columns: 2.6rem 1fr; gap: 0 0.9rem; margin: 0 0 2.75rem; }
+  .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem; color: var(--accent); padding-top: 0.35rem;
+  }
+  section p { margin: 0 0 0.8rem; }
+  section p:last-of-type { margin-bottom: 0; }
+  .evidence {
+    margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px dashed var(--border);
+    font-size: 0.85rem; color: var(--muted);
+    font-family: "Archivo", sans-serif;
+  }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05em 0.35em;
+    white-space: nowrap;
+  }
+  .evidence code { background: none; border: none; padding: 0; color: var(--ink); white-space: normal; }
+
+  .callout {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 0.85rem 1rem;
+    margin: 1rem 0 0;
+    font-size: 0.97rem;
+  }
+  .callout em { color: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; margin-top: 1rem;
+    font-family: "Archivo", sans-serif; }
+  .tablewrap { overflow-x: auto; }
+  th { text-align: left; font-weight: 600; font-size: 0.78rem; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--muted); padding: 0.4rem 1rem 0.4rem 0; border-bottom: 1px solid var(--border); }
+  td { padding: 0.45rem 1rem 0.45rem 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  footer { border-top: 1px solid var(--border); margin-top: 3.5rem; padding-top: 1.25rem;
+    font-size: 0.9rem; color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; outline-offset: 2px; }
+  @media (max-width: 480px) { section { grid-template-columns: 1fr; } .num { padding: 0; } }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">AI-Powered Data Quality Assistant · take-home case study</div>
+  <h1>How the Data Quality Assistant Was Built</h1>
+  <p class="lede">Every line of application code here was written by AI coding agents — but under a
+  <strong>written process, a task tracker the agents share, tests against the real dependencies,
+  and a deterministic gate</strong> that decides when work is done. This page is the process;
+  <code>AI_USAGE.md</code> is the fully-referenced log behind it.</p>
+
+  <div class="stats">
+    <div class="stat"><b>~2 days</b><span>elapsed build</span></div>
+    <div class="stat"><b>14</b><span>merged PRs</span></div>
+    <div class="stat"><b>41</b><span>beads closed</span></div>
+    <div class="stat"><b>4</b><span>learning tests</span></div>
+    <div class="stat"><b>4</b><span>UX variants generated</span></div>
+    <div class="stat"><b>283</b><span>checks collected</span></div>
+  </div>
+
+  <section>
+    <div class="num">01</div>
+    <div>
+      <h2>A written workflow, not ad-hoc prompting</h2>
+      <p>Development follows my own documented process for building greenfield software with AI
+      agents — checked into this repo as <code>software_development_workflow.md</code>, with the
+      short operating version in <code>HOW_I_BUILD.md</code>. Its first rule: before any agent
+      writes code, <em>the problem must fit in my head</em>. I hold the compressed map; the spec
+      and the task tracker hold the territory. The agent executes; judgment and scope stay with me.</p>
+      <p>This project ran the workflow at its FULL tier: sharpen the problem → challenge the plan →
+      spec → learning tests → tasks with definitions of done → build under the gate.</p>
+      <div class="evidence">Evidence: <code>software_development_workflow.md</code> · <code>HOW_I_BUILD.md</code> · <code>HANDOFF.md</code> §2</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">02</div>
+    <div>
+      <h2>Spec-driven, decomposed into tasks</h2>
+      <p>First a detailed technical spec — <code>SPEC.md</code>, 15 numbered features with
+      observable acceptance criteria, explicit non-goals, and one end-to-end scenario. The spec was
+      then decomposed into small tasks, each carrying a Definition of Done and the checks that
+      prove it. The spec was <strong>frozen only after the learning tests ran</strong> (section 04),
+      so no feature was designed on an unverified assumption.</p>
+      <div class="evidence">Evidence: <code>SPEC.md</code> · task DoDs via <code>bd show &lt;id&gt;</code></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">03</div>
+    <div>
+      <h2>Beads: external memory for the agents</h2>
+      <p>Task tracking is <strong>beads</strong> (<code>bd</code>) — an issue tracker built for
+      coding agents, replacing Jira/Asana. Every task was filed as a bead; the agent claims it,
+      works it, and closes it with a per-criterion close reason. Because beads live in a database
+      the agent reads at every session start, they act as durable external memory: a fresh session
+      knows what is done, what is next, and why past decisions were made. That is what makes
+      long-running, multi-session work — and teamwork — possible.</p>
+      <p>The delegation unit was: one bead → one branch → one PR. Agents ran no state-changing git
+      command; I reviewed and merged all fourteen PRs myself.</p>
+      <div class="evidence">Evidence: <code>bd list --status closed</code> (41) · <code>bd memories</code> · PR bodies via <code>gh pr view</code></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">04</div>
+    <div>
+      <h2>Learning tests: verify the libraries before trusting them</h2>
+      <p>This product leans on third-party dependencies — Great Expectations, the Claude Agent SDK,
+      Supabase PostgreSQL. An agent will happily write code against a capability a library does not
+      actually have, and the failure surfaces hours later. So before the spec froze, four
+      <strong>learning tests</strong> ran small scripts against the <em>real</em> installed
+      dependencies. Every one falsified an assumption the spec was about to be built on:</p>
+      <div class="tablewrap"><table>
+        <tr><th>Test</th><th>What it found</th><th>What changed</th></tr>
+        <tr><td class="mono">LT-1b</td><td>Running 10 rules over 500,000 rows takes 14.84&nbsp;s — timed at 1k / 10k / 100k / 500k rows. Too slow to watch a blank spinner.</td><td>Results stream progressively: first verdict at ~2&nbsp;s, list fills in.</td></tr>
+        <tr><td class="mono">LT-1a</td><td>A rule that <em>could not run</em> looks identical to a rule that <em>failed</em>.</td><td>“Errored” became a third result state, never folded into “failed”.</td></tr>
+        <tr><td class="mono">LT-2a</td><td>GE accepts 10 of 25 invalid rules without error (e.g. <code>min=100, max=1</code>).</td><td>Our own validation table runs before GE ever sees a rule.</td></tr>
+        <tr><td class="mono">LT-2b</td><td>The model proposes rules that are statistically true but business-naive.</td><td>Human review of AI proposals became a first-class product feature.</td></tr>
+      </table></div>
+      <div class="evidence">Evidence: <code>learning-tests/FINDINGS.md</code> · <code>learning-tests/lt1b_results.json</code> · PRs #2, #4, #5, #7</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">05</div>
+    <div>
+      <h2>UX explored with a long-running agent harness</h2>
+      <p>For the interface, I used Anthropic’s long-running-agent harness approach to generate
+      <strong>four independent, complete UX variants</strong> — each a full HTML mock in
+      <code>design/</code>. A three-judge agent panel then scored all four across compliance,
+      expert usability, and buildability. I overrode the panel’s recommendation and picked the
+      <em>Workbench</em> variant (<code>design/ux-variant-workbench.html</code>), because its
+      side-by-side plain-English / compiled-rule layout <em>is</em> the product’s thesis — and I
+      grafted in the mitigations the judges prescribed for its weak spot.</p>
+      <div class="callout">Generating several complete alternatives and judging them beats iterating
+      on one draft — <em>and the human still makes the call.</em></div>
+      <div class="evidence">Evidence: <code>design/README.md</code> (scores) · <code>UX_HARNESS_FINDINGS.md</code> · PR #6</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">06</div>
+    <div>
+      <h2>Dynamic workflows: a team of agents, not one</h2>
+      <p>Features were built with Claude Code’s dynamic workflows — one orchestrating session
+      spawning multiple sub-agents with distinct roles: one <strong>builds</strong> the task, one
+      <strong>verifies</strong> it against the acceptance criteria, one reviews <strong>quality</strong>.
+      It works like a small software team — developer, QA, reviewer, with the orchestrator as the
+      manager — except the standup takes seconds and the reviewer never gets tired.</p>
+      <div class="evidence">Evidence: session transcripts (recorded via SageOx) · wave PRs #12–#14</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">07</div>
+    <div>
+      <h2>The right model for the right task</h2>
+      <p>Model choice was deliberate: <strong>Claude Fable 5</strong> for the critical,
+      judgment-heavy work — generating the four UX variants, driving the multi-agent dynamic
+      workflows — and <strong>Claude Opus 5</strong> for straightforward implementation where the
+      task is “write this well-specified code”. Matching model capability to task difficulty keeps
+      both quality and cost honest.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">08</div>
+    <div>
+      <h2>The gate: what made delegation safe</h2>
+      <p>None of the above is safe unless something deterministic decides when work is actually
+      done. <code>make check</code> runs lint → format → typecheck → 187 unit checks in under
+      3&nbsp;seconds, offline. On top of it sits an <strong>anti-cheat layer</strong>: a check that
+      walks every test file with Python’s <code>ast</code> and fails the build on any test that
+      asserts nothing or skips silently — so an agent cannot go green by writing hollow tests.
+      The gate was deliberately broken and shown to block <strong>thirteen documented times</strong>
+      before it was trusted.</p>
+      <div class="evidence">Evidence: <code>Makefile</code> · <code>tests/test_code_quality_thresholds.py</code> · <code>VERIFICATION.md</code> §4</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="num">09</div>
+    <div>
+      <h2>SageOx: the team layer</h2>
+      <p>Sessions were recorded with <a href="https://sageox.ai">SageOx</a>, which makes the AI the
+      coordination layer of a team: it listens to team discussions, turns them into transcripts a
+      coding agent can read, and lets an engineer ask their agent “what was decided?” instead of
+      chasing Slack threads. In this solo take-home it served as the session ledger; in a real team
+      it replaces the email/Slack hop between a decision and the code change. Happy to demo it live.</p>
+    </div>
+  </section>
+
+  <footer>
+    Full evidence-linked log: <code>AI_USAGE.md</code> — every claim there maps to a command you can
+    run (<code>make check</code>, <code>bd list</code>, <code>gh pr view</code>). Companions:
+    <code>SPEC.md</code> · <code>VERIFICATION.md</code> · <code>HANDOFF.md</code>.
+  </footer>
+</div>
