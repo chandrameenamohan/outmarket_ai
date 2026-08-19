@@ -20,9 +20,10 @@ import { usePathname, useSearchParams } from "next/navigation";
  * F12 AND F13 ARE PER-TABLE SCREENS, WHICH THE MOCKUP'S STATIC DATA LET IT IGNORE —
  * its Rules tab simply was `orders`. Here the two tabs follow the table in context,
  * read from the path (`/tables/<t>/rules`) or the query (`?table=` on /runs and
- * /review), and render as muted text when there is none: a link has to point
- * somewhere, and inventing a default table would be this component deciding which
- * table matters, which is the coverage dashboard's whole job.
+ * /review); with no table in context they fall back to `fallbackTable` — the coverage
+ * order's own first entry, chosen by the payload in the layout and never here (bead
+ * dq-1rp: every tab clickable from the first paint) — and go muted only when even
+ * that is unavailable, because a link has to point somewhere.
  *
  * WHAT KEEPS THIS LEGAL ON /review (SPEC F11, frozen): the clause forbids a TABLE
  * LIST, and no tab names a table — the visible text is four screen names, fixed. The
@@ -42,12 +43,13 @@ const TABS = [
   { key: "f13", label: "Results" },
 ] as const;
 
-export function Tabs() {
+export function Tabs({ fallbackTable }: { fallbackTable: string | null }) {
   const pathname = usePathname();
   const query = useSearchParams();
 
   const fromPath = /^\/tables\/([^/]+)\/rules$/.exec(pathname)?.[1];
-  const table = fromPath ? decodeURIComponent(fromPath) : query.get("table");
+  const table =
+    (fromPath ? decodeURIComponent(fromPath) : query.get("table")) ?? fallbackTable;
 
   const current = fromPath
     ? "f12"

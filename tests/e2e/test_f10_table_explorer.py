@@ -222,7 +222,12 @@ def test_expert_view_omits_engineer_columns_from_the_dom(driver, api_url, covera
     The second half is what stops this passing on a page that renders nothing at all:
     the same address, in the engineer's view, must carry every one of the things asserted
     absent above. An absence check with no matching presence check is green on a 500.
+
+    The expert is CHOSEN here rather than assumed: since bead dq-1rp a cold context is
+    the engineer's view (the demo opens open), so the conservative document this check
+    walks is the one a device gets after saying so in the header.
     """
+    choose_role(driver, "expert")
     driver.goto("/tables")
     driver.page.wait_for_load_state("networkidle")
     assert _path(driver) == "/tables", (

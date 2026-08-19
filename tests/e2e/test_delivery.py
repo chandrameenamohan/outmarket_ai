@@ -48,13 +48,12 @@ HYGIENE = pathlib.Path(__file__).with_name("test_ui_hygiene.py")
 # accessibility. 21 cases, and every one of them is a fact about the DELIVERY —
 # did the server render, did it render without errors, is what it rendered usable.
 #
-# Visual regression is deliberately NOT in the smoke, and the reason is the same one
-# that keeps six of its seven states pending: what those screens render is a function of
-# the store behind them, not of the code. Exactly ONE baseline is written today
-# (`role-door.png`) and it is not approved either — nobody has staged it, so the check
-# pends rather than compares. A diff run against a stack serving a different store would
-# report on the contents of a DATABASE while wearing the costume of a check about
-# deployment. That store is B23's subject, not this one's.
+# Visual regression is deliberately NOT in the smoke: what those screens render is a
+# function of the store behind them, not of the code. A diff run against a stack
+# serving a different store would report on the contents of a DATABASE while wearing
+# the costume of a check about deployment. That store is B23's subject, not this one's.
+# (This note used to count its states and name `role-door.png`; the fixture store
+# arrived with dq-vix and the door left with dq-1rp, and the argument outlived both.)
 SMOKE = "console or layout_shift or accessibility"
 
 
