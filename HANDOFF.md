@@ -13,11 +13,22 @@ shipped, **47 of 52 beads are closed, all seven epics are closed**, and the prod
 
 Two Railway services from this repo, each with its own Dockerfile.
 
-> ### ⚠ THE LIVE URLS DO NOT CARRY THE FIXES IN THIS WORKING TREE.
-> The deployment was built from `ea9a179`. **A hostile QA pass against it found four defects, all
-> four are fixed here, and none of them is deployed.** Nothing in this repository should be read as
-> a description of what the live URLs currently do. **The lead redeploys after review** — §9 item 3
-> lists exactly what the live site still does wrong, and `git log ea9a179..` is the difference.
+> ### THE LIVE URLS NOW CARRY THE DEFECT-WAVE FIXES. *(corrected 2026-08-19)*
+> This box previously warned that the deployment was built from `ea9a179` and carried none of the
+> four hostile-QA fixes. **That is no longer true — Railway has been redeployed from `2373888`**
+> (`173609e` "Fix the four defects hostile QA found on the live deployment"). Re-measured against
+> the live app on 2026-08-19, not argued:
+>
+> | probe | result |
+> |---|---|
+> | `GET /rules/not-a-uuid` | **404** — was a 502 naming `api.railway.internal:8000` |
+> | `GET /tables/orders/rules` as **expert** | 42,361 b · `expect_column` **0** · `kwargs` **0** |
+> | `GET /tables/orders/rules` as **engineer** | 47,666 b · `expect_column` 48 · `kwargs` 20 |
+>
+> The `/runs/<recordId>` leak (`dq-220`) is closed on live too, and the demo store was reseeded at
+> `2026-08-18T12:53`, so the QA pass's writes are gone and the ERRORED/sampled demo states are back.
+> **A reviewer opening the live URL today is looking at the fixed product.** What is still only in
+> this working tree is the *newer* work — `dq-8zj`'s handle change and `dq-mc0` — not the defect wave.
 
 **The gate, re-measured at close-out on 2026-08-18 (§2 has the block):** `make check` **201 passed,
 0 skipped, exit 0**; `make check-ge` **33 passed, exit 0**; the browser layer **63 passed, 2 failed,
@@ -36,8 +47,9 @@ rest is engineering:
    open: a proposal's checkbox carries its compiled `{type, kwargs}` into the domain expert's
    document, because an unsaved proposal has no id to be addressed by. Measured, not argued —
    `dq-220`'s notes have the byte counts.
-3. **`dq-mc0`**, filed at close-out: two concurrent browser-layer runs collide on the constant
-   schema `dq_scenario`. P3, and the third instance of one shape (§2, §6).
+3. **`dq-mc0` is done and proven** — SPEC §7's stack schema carries the pid, two §7 flows ~2 s apart
+   are both green, and the sweep leaves no graveyard (§2, §4.7.3 of VERIFICATION). What is left of
+   it is a commit and a close. P3, and it was the third instance of one shape (§2, §6).
 
 **And one thing that is neither**: put `DEPLOYED_APP_URL` and `DEPLOYED_API_URL` in `.env`. The
 deployment check passed against the live URLs when they were exported by hand (`dq-cyi.1`), and
@@ -101,6 +113,10 @@ browser layer     63 passed, 2 failed, 2 skipped, 237 deselected, 525.11 s, exit
 check that joined no layer: 201 default + 33 `ge` + 67 `e2e` + 6 `live` − 3 (`e2e` and `live` both)
 = 304.
 
+**Re-measured 2026-08-19 on the combined tree** (`dq-8zj`'s handle change plus `dq-mc0`): `make
+check` **207 passed, 103 deselected, 0 skipped, exit 0**. The deselected count is unchanged, so the
+six new checks are all default-layer and the arithmetic still closes: 207 + 103 = **310 collected**.
+
 **The two browser-layer failures are the honest kind and neither is a code fault.**
 `tables-three-buckets` and `run-record-in-flight` are visual baselines photographed before this
 wave's fixes; the screens they photograph genuinely changed. **The layer is red until a person looks
@@ -123,15 +139,30 @@ both guards and the green concurrent run. `make reset-scratch [ARGS=dq_check_ge]
 `make check-ui` also needs its two processes already running — the command lines are in
 `VERIFICATION.md` §1, and the API one must carry `DQ_SCHEMA=dq_check` or the layer fails by name.
 
-**A THIRD SHARED-SCHEMA COLLISION, and it is not fixed** (`dq-mc0`, P3, filed at close-out).
-`check-ge` and `check-ui` no longer fight, but **two concurrent runs of `check-ui` still do**:
-`tests/e2e/scenario_stack.py::SCENARIO_SCHEMA` is the literal `dq_scenario` and SPEC §7 **drops it
-on the way in**, because §7 opens on "no rules exist". Right for one runner, wrong for two. Seen at
-close-out as `AssertionError: the store holds 3 rule(s) for orders after a screen of proposals` —
-an assertion that is exactly right and must not be loosened — while `dq_scenario` showed 19 rule
-revisions and 2 run records written by the *other* process inside the same 100 seconds. §7 passes
-alone (`1 passed in 170.18 s`). A marker cannot tell two processes apart, which is why `dq-cyi.4`'s
-fix does not reach this one.
+**A THIRD SHARED-SCHEMA COLLISION, and it is FIXED in this tree** (`dq-mc0`, P3, filed at close-out
+on 2026-08-18, fixed 2026-08-19). `tests/e2e/scenario_stack.py::SCENARIO_SCHEMA` was the literal
+`dq_scenario` and SPEC §7 **drops it on the way in**, because §7 opens on "no rules exist" — right
+for one runner, wrong for two. Seen at close-out as `AssertionError: the store holds 3 rule(s) for
+orders after a screen of proposals`, an assertion that is exactly right and was not loosened, while
+`dq_scenario` showed 19 rule revisions and 2 run records written by the *other* process inside the
+same 100 seconds. A marker cannot tell two processes apart, which is why `dq-cyi.4`'s fix did not
+reach this one; **the schema now carries the pid** — `dq_scenario_<pid>` — and the way-in drop
+sweeps the ones whose process is gone, never one a live run owns. **Shown, two §7 flows launched
+~2 s apart:**
+
+```
+run A   pytest -m e2e tests/e2e/test_spec_section_7.py   1 passed in 141.24s   exit 0
+run B   pytest -m e2e tests/e2e/test_spec_section_7.py   1 passed in 133.35s   exit 0
+information_schema afterwards:
+['dq', 'dq_check', 'dq_check_ge', 'dq_hostile', 'dq_scenario_33664', 'dq_scenario_33964']
+```
+
+Two distinct per-pid stores and no `dq_scenario`. `VERIFICATION.md` §4.7.3 has the whole account,
+the `ponytail:` ceiling on the sweep, and the unit check that catches a regression without paying
+for an e2e run (`tests/test_scenario_schema_isolation.py`). **Two whole `make check-ui` runs at once
+are still not green** — the rest of that layer shares `dq_check` through one API process and three
+checks there count rules before and after an action. Same shape a fourth time, out of `dq-mc0`'s
+scope by the bead's own words, and worth its own bead.
 
 **Zero skips in `make check`.** That number used to be 28 and every one of them was a `PENDING —`
 line naming what it waited for; they are all assertions now. The **two** remaining skips are both in
@@ -244,8 +275,12 @@ exists.
   wave's fixes changed the screens they photograph — `tables-three-buckets` and
   `run-record-in-flight`, §9. Look at those two, `git add` them, re-run, and both beads close on
   that output.
-- **`dq-mc0` · P3 — filed at close-out, not fixed.** Two concurrent browser-layer runs collide on
-  the constant schema `dq_scenario`. §2 has the evidence. It is the third instance of one shape.
+- **`dq-mc0` · P3 — fixed in this tree and proven, open only until it is committed and closed.**
+  Two concurrent §7 runs collided on the constant schema `dq_scenario`; it now carries the pid, and
+  the same way-in drop sweeps the schemas whose process is gone. Two §7 flows ~2 s apart are green
+  (141.24 s and 133.35 s, both exit 0) and left two distinct per-pid schemas behind. §2 has the
+  evidence, `VERIFICATION.md` §4.7.3 the account. It was the third instance of one shape — and the
+  fourth is already visible: two whole `make check-ui` runs still share `dq_check`.
 
 **Read `bd show <id>` before starting anything** — each bead carries its own acceptance, its check
 order (cheapest deterministic first), and an explicit out-of-scope list.
@@ -343,8 +378,22 @@ touching F8, F9 or F13. Summary:
   is the one that catches a stored non-rule — it is "one writer per schema", and that is what bead
   `dq-cyi.4` shipped: a schema per layer, derived from the markers rather than exported, plus a
   refusal for a process that collected both. The two run together green now (VERIFICATION §4.7.2).
-  **It has now happened a third time** and is still open: two *processes* of the same layer collide
-  on `dq_scenario`, which a marker cannot tell apart (`dq-mc0`, §2).
+  **It has now happened a THIRD time, in the same shape every time: one schema name, two writers,
+  and an append-only store that cannot forgive it** (§2 counts them). The third was SPEC §7's own
+  stack schema, across two *processes* of one layer (`dq-mc0`): `dq_scenario` was a literal and the
+  flow DROPS it on the way in, so a second `make check-ui` took the first one's store away and wrote
+  into it, and the first then failed its own §7 assertion — *"the store holds 3 rules"* — on the
+  other run's rules. **The pattern, now that there are three of it:** the discriminator has to come
+  from something the colliding parties cannot share, and each instance needs one finer than the
+  last. A marker names a layer and cannot tell two processes of it apart, so `dq-mc0` puts the
+  **pid** in the name — `dq_scenario_<pid>` in `tests/e2e/scenario_stack.py` — and the way-in drop
+  sweeps the scenario schemas whose process is gone, never one a live run owns, since sweeping those
+  would be the same bug with an extra step. Two §7 flows ~2 s apart are green (141.24 s and
+  133.35 s, both exit 0) and left two distinct per-pid schemas behind — `VERIFICATION.md` §4.7.3 has
+  the run lines and the schema listing. `tests/test_scenario_schema_isolation.py` holds both halves
+  as unit checks, so the next regression costs no e2e run to catch. **Read a fourth occurrence as a
+  shared-name problem before reading it as a product bug** — and there is one waiting: two whole
+  `make check-ui` runs still share `dq_check`.
 
 **Found by a hostile QA pass against the LIVE deployment, 2026-08-18 — the four defects of this
 wave, and each one is a different way for a rule to be carried by convention:**

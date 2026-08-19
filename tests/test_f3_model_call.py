@@ -219,14 +219,30 @@ def test_suggestions_for_orders_are_all_catalog_types_and_none_is_persisted_as_a
     a caller wired up wrongly rather than a module written wrongly.
     """
     before = store.revisions(table=TABLE)
-    made = asyncio.run(suggest.for_table(TABLE, store.BULK_CAP))
+    batch = asyncio.run(suggest.for_table(TABLE, store.BULK_CAP))
     after = store.revisions(table=TABLE)
+    made = batch.proposals
 
     assert made, "the model returned no proposals for a 500,000-row table with planted defects"
     assert len(after) == len(before), (
         f"the store grew from {len(before)} to {len(after)} revisions while proposals were "
         "generated. F3 proposes; only a person accepts."
     )
+    # The handle is what the screen will send back (bead dq-8zj), so a real batch is the
+    # one place to prove the round trip end to end: every proposal the model actually made
+    # is addressable, and the name it is addressable by is not the rule.
+    for index, proposal in enumerate(made):
+        handle = batch.handle(index)
+        assert suggest.resolve(TABLE, handle) is proposal, (
+            f"{handle} does not resolve to the proposal it names. The accept path reads a "
+            "checkbox through this function; a handle that resolves to the wrong row would "
+            "accept a rule nobody read."
+        )
+        assert proposal.type not in handle and "kwargs" not in handle, (
+            f"the handle {handle!r} carries the rule it stands for. It is the value of a "
+            "checkbox in the DOMAIN EXPERT's document, and SPEC F12 Rev 0.4 says the "
+            "framework is absent from it."
+        )
     for proposal in made:
         assert proposal.type in catalog.TYPES, f"{proposal.type} is outside the catalog"
         assert proposal.status == store.PROPOSED, f"{proposal.type} is {proposal.status!r}"

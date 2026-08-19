@@ -301,7 +301,8 @@ class Handler(refuse.Refusing):
     def _batch(self) -> None:
         """F12 · one act of judgment over a selection (SPEC F12, bead dq-rbf.4).
 
-        The body carries unsaved proposals (`specs`), stored rules (`rule_ids`), or both,
+        The body carries machine proposals (`proposals`, as handles — bead dq-8zj), an
+        authored draft (`specs`), stored rules (`rule_ids`), or any mix,
         and `store.judge_batch()` does everything: the cap, the empty selection, the
         reason requirement, the validator on every spec, and the two revisions each fresh
         rule gets. Nothing is decided here — a cap re-checked in this handler would be a

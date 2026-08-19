@@ -54,23 +54,38 @@ function here(table: string, complaint?: string, showing = false): string {
 /**
  * A selection, as the checkboxes and the row buttons encode it.
  *
- * Two populations arrive through one control, so each carries its own prefix: an unsaved
- * proposal travels as its whole `{type, kwargs}` (there is nothing else to identify it
- * by — it has no row), and a stored rule travels as its id. The server re-validates
- * every spec through `propose()` regardless, so a spec edited in the browser on its way
- * back is refused by INV-2's own door rather than by anything here.
+ * Three populations arrive through one control, so each carries its own prefix
+ * (`./token.ts`): a machine proposal travels as a HANDLE naming one row of the batch the
+ * server is holding, a stored rule as its id, and F4's authored draft as its own
+ * `{type, kwargs}` — the one of the three with no batch to be an index into.
+ *
+ * THE HANDLE IS BEAD dq-8zj. A proposal used to travel as its spec as well, which put
+ * the Great Expectations type and kwargs in the domain expert's document on every
+ * checkbox (SPEC F12 Rev 0.4). Nothing here reads it, and nothing here could: the server
+ * resolves it against its own memo and refuses one it does not hold, which is also what
+ * makes an expired batch a sentence rather than a write.
+ *
+ * The server re-validates every spec through `propose()` regardless, so a spec edited in
+ * the browser on its way back is refused by INV-2's own door rather than by anything here.
  */
-function selection(tokens: string[]): { specs: Spec[]; rule_ids: string[] } {
+function selection(tokens: string[]): {
+  specs: Spec[];
+  proposals: string[];
+  rule_ids: string[];
+} {
   const specs: Spec[] = [];
+  const proposals: string[] = [];
   const rule_ids: string[] = [];
   for (const token of tokens) {
-    if (token.startsWith("spec:")) {
+    if (token.startsWith("proposal:")) {
+      proposals.push(token.slice("proposal:".length));
+    } else if (token.startsWith("spec:")) {
       specs.push(JSON.parse(token.slice(5)) as Spec);
     } else if (token.startsWith("rule:")) {
       rule_ids.push(token.slice(5));
     }
   }
-  return { specs, rule_ids };
+  return { specs, proposals, rule_ids };
 }
 
 /**

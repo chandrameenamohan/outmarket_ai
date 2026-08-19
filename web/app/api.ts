@@ -86,8 +86,17 @@ export type Rule = Judgeable & {
  * F12 · one machine proposal, and it is NOT a `Rule` — it has no id, because it has no
  * row. `app/rules/suggest.py` cannot reach the store or the executor, so this is a line
  * on a screen with buttons under it; pressing one is what persists it (SPEC F12).
+ *
+ * IT USED TO BE `Judgeable & Spec`, AND THAT WAS THE LEAK (bead dq-8zj). Having no row,
+ * it identified itself by BEING its rule: the checkbox that accepts one carried
+ * `{type, kwargs}` as its value, so a domain expert asking for suggestions received the
+ * framework in their own document — the one thing SPEC F12 Rev 0.4 says is absent — and
+ * `withoutFramework` could not take it out without leaving that reader a checkbox that
+ * accepts nothing. `handle` is what replaced it: an opaque name for one row of the
+ * batch `app/rules/suggest.py` is already holding, meaningless to anyone who did not
+ * ask for it and refused by `resolve()` once it expires. The rule stays on the server.
  */
-export type Proposal = Judgeable & Spec;
+export type Proposal = Judgeable & { handle: string };
 
 /**
  * What F12's list renders, whichever of the two a row happens to be.

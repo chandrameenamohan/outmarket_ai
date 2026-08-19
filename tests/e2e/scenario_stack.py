@@ -23,6 +23,11 @@ flow is the one place in the harness where the evidence is a real model's real o
 against real data. `DROP SCHEMA ... CASCADE` is also the ONLY reset available: both stores
 refuse DELETE and TRUNCATE by trigger, from every role including the owner.
 
+**ONE SCHEMA PER PROCESS, and the way-in drop is what makes that necessary** (bead
+`dq-mc0`, argued at `SCENARIO_SCHEMA`). The graveyard that would otherwise leave behind is
+swept by the same way-in drop: a run takes away the scenario schemas whose process is
+gone, and leaves alone the one belonging to a run that is still going.
+
 THE DROP HAPPENS BEFORE THE SERVER STARTS, and that ordering is load-bearing rather than
 tidy: `app/db/system.py` establishes its idempotent DDL once per connection and remembers
 it, so a schema dropped underneath a process that has already connected is a schema
@@ -47,7 +52,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -56,10 +61,24 @@ import pytest
 import scratch
 from conftest import REPO, Driver, pending
 
-# The scenario's own store schema. Never `dq` (the demo's) and never `dq_check` (the rest
-# of the browser layer's) — this one is dropped on the way in, so it may not be a schema
-# anything else is holding state in.
-SCENARIO_SCHEMA = "dq_scenario"
+# The scenario's own store schema, ONE PER PROCESS. Never `dq` (the demo's) and never
+# `dq_check` (the rest of the browser layer's) — this one is dropped on the way in, so it
+# may not be a schema anything else is holding state in.
+#
+# AND THAT INCLUDES A SECOND COPY OF THIS FLOW, which is why the pid is in the name (bead
+# `dq-mc0`). It was the literal `dq_scenario` — one schema for however many runners there
+# are — so a second `make check-ui` dropped it underneath the first and wrote into it, and
+# the first then failed its own §7 assertion, *"the store holds 3 rules after a screen of
+# proposals"*, on the other run's rules. That assertion is F3's whole promise and is
+# untouched; what was wrong was two writers in one schema. Same lesson as `tests/scratch.py`
+# one level down, where a marker names the layer — but a marker cannot tell two processes of
+# the SAME layer apart, so this discriminator has to come from the process itself.
+SCENARIO_PREFIX = "dq_scenario_"
+SCENARIO_SCHEMA = f"{SCENARIO_PREFIX}{os.getpid()}"
+
+# What SCENARIO_SCHEMA used to be, kept only so the sweep below can take away the one a
+# pre-`dq-mc0` checkout left behind. Nothing writes here.
+LEGACY_SCHEMA = "dq_scenario"
 
 # SPEC §7 makes three real, billed model calls, and this module boots the process that
 # makes them — so the credential in THIS environment is the one that process will get
@@ -229,6 +248,10 @@ def _reset_schema(schema: str) -> None:
     invalidate every approval a person has given or is about to give.
     `seed/seed_demo_rules.py` states that consequence for its own `--reset`; it may not be
     reachable by accident from here.
+
+    IT ALSO SWEEPS, in the same connection, because one schema per process is one schema
+    per RUN and nobody is coming back to delete last week's. What it takes away is only
+    what `_stale_scenario_schemas` says is nobody's, so a run in flight keeps its store.
     """
     if schema == scratch.DEMO_SCHEMA:
         raise pytest.UsageError(
@@ -241,7 +264,53 @@ def _reset_schema(schema: str) -> None:
 
     conn = psycopg2.connect(os.environ[DSN_VAR], connect_timeout=30)
     with contextlib.closing(conn), conn, conn.cursor() as cur:
+        # `!` as the LIKE escape, because `_` is a single-character wildcard and the
+        # prefix is mostly underscores — unescaped, `dq_scenario_%` also matches names
+        # nobody here owns. The Python filter below is the authority either way.
+        cur.execute(
+            r"select nspname from pg_namespace where nspname like 'dq!_scenario%' escape '!'"
+        )
+        for stale in _stale_scenario_schemas(row[0] for row in cur.fetchall()):
+            cur.execute(f"drop schema if exists {stale} cascade")
         cur.execute(f"drop schema if exists {schema} cascade")
+
+
+def _alive(pid: int) -> bool:
+    """Is there a process with this id? Signal 0 is the platform's own way to ask."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass  # somebody else's process. Alive, and not ours to sweep.
+    return True
+
+
+def _stale_scenario_schemas(names: Iterable[str]) -> list[str]:
+    """Of these schema names, the scenario schemas that belong to no living process.
+
+    THE POINT IS WHAT IT REFUSES TO RETURN. A sweep that took every `dq_scenario_*` it
+    found would be `dq-mc0` again with an extra step: the second runner would drop the
+    first one's store, just on the way in rather than by name collision. So the name has
+    to carry a pid, and a pid is a question the operating system will answer.
+
+    Anything whose suffix is not a pid is left alone — except the pre-`dq-mc0` literal,
+    which no process owns and which nothing writes to any more.
+
+    ponytail: liveness is asked LOCALLY and these schemas live on a shared Supabase, so a
+    run on another machine whose pid happens to be free on this one would be swept out
+    from under it. Today that is one developer on one laptop. The upgrade path, when it
+    stops being, is a session advisory lock per schema — `pg_try_advisory_lock` held for
+    the run, and a schema whose lock is free is a schema nobody is using anywhere.
+    """
+    stale = []
+    for name in names:
+        pid = name.removeprefix(SCENARIO_PREFIX)
+        if name == SCENARIO_SCHEMA:
+            continue
+        if name == LEGACY_SCHEMA or (pid.isdigit() and not _alive(int(pid))):
+            stale.append(name)
+    return stale
 
 
 def _free_port() -> int:

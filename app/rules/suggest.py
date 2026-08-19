@@ -60,6 +60,7 @@ reply has actually failed here.
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -146,10 +147,88 @@ class Proposal:
 # inferred from. Five minutes is also the budget INV-1 gives one table's review.
 MEMO_SECONDS = profile.CACHE_SECONDS
 
-_MEMO: dict[tuple[str, int], tuple[float, tuple[Proposal, ...]]] = {}
+
+@dataclass(frozen=True)
+class Batch:
+    """One memoised batch of proposals, and the name the browser is allowed to know it by.
+
+    IT USED TO BE A `(timestamp, proposals)` TUPLE, and the id is the whole reason it is
+    not one any more (bead dq-8zj). A proposal has no row, so the checkbox that accepts
+    one used to carry its whole compiled `{type, kwargs}` as its value — which put Great
+    Expectations type names and kwargs in the DOMAIN EXPERT's document, on the one screen
+    both users work on, and no key-name filter in `web/app/framework.ts` could take them
+    out without leaving that reader a checkbox that accepts nothing (SPEC F12 Rev 0.4).
+
+    So a proposal now travels as `handle()` — this batch's id and the proposal's index in
+    it — and `resolve()` below is the only thing that can turn one back into a rule. The
+    id is `secrets.token_urlsafe`, not a counter: an unguessable name is what makes a
+    forged handle a refusal rather than somebody else's proposal, and `resolve()` is
+    scoped to the table as well, so a handle cannot carry a rule sideways onto a table it
+    was never inferred from.
+
+    `fresh` IS THE SAME FIVE MINUTES THE MEMO ALREADY HAD, given a name because two
+    callers now ask it. An expired handle is a refusal — never a write, never a guess at
+    what the reader meant (INV-2).
+    """
+
+    id: str
+    at: float
+    proposals: tuple[Proposal, ...]
+
+    @property
+    def fresh(self) -> bool:
+        return time.monotonic() - self.at < MEMO_SECONDS
+
+    def handle(self, index: int) -> str:
+        """What a checkbox carries instead of the rule it accepts."""
+        return f"{self.id}.{index}"
 
 
-async def for_table(table: str, limit: int) -> tuple[Proposal, ...]:
+# What a reader is told when the handle they sent names nothing this process is holding.
+# It says the three things they can act on: nothing was written, why there was nothing to
+# find (F3 — a proposal is never stored, so there is no older list to fall back to), and
+# the one action that works.
+EXPIRED = (
+    "those suggestions are no longer on this server, and nothing was saved. Proposals are "
+    "never stored until somebody accepts one, and the batch behind the screen you pressed "
+    "is kept for five minutes only. Ask for suggestions again and judge the fresh list."
+)
+
+_MEMO: dict[tuple[str, int], Batch] = {}
+
+
+def resolve(table: str, handle: str) -> Proposal:
+    """One handle from a checkbox back to the proposal it names, or a refusal.
+
+    THE ACCEPT PATH'S HALF OF `Batch`, and the reason it can be trusted: the spec that
+    reaches the store is the one THIS PROCESS composed and already put through
+    `sanity()` — it never travelled to a browser and came back, so there is nothing here
+    for an editor to have changed. `store.judge_batch` still walks every spec through
+    `validate()` regardless (INV-2, layer 2); this function removes a round trip, not a
+    check.
+
+    A HANDLE THAT NAMES NOTHING IS A REFUSAL, and that is the answer to every one of the
+    three ways it can happen — expired, forged, or from a batch this process replaced.
+    `RuleRejected` is a `ValueError`, so `app/api/refuse.py` answers 422 and the caller
+    reads `EXPIRED`. There is deliberately no fallback to "the newest batch for this
+    table": a person selected eight sentences they had read, and quietly accepting eight
+    different ones is the failure a refusal exists to prevent.
+
+    ponytail: a scan of the memo rather than a second dict keyed by batch id. Ceiling: one
+    entry per (table, limit) in a single-process demo server, so this is a walk over a
+    handful of items on a path that is about to do database work. The upgrade path is the
+    same one `_MEMO` already names.
+    """
+    named, _, index = handle.partition(".")
+    for (memoised, _limit), batch in _MEMO.items():
+        if memoised == table and batch.id == named and batch.fresh:
+            if index.isdigit() and int(index) < len(batch.proposals):
+                return batch.proposals[int(index)]
+            break
+    raise RuleRejected(EXPIRED)
+
+
+async def for_table(table: str, limit: int) -> Batch:
     """Profile `table`, ask the model for at most `limit` rules, hand back proposals.
 
     Saves nothing.
@@ -168,21 +247,32 @@ async def for_table(table: str, limit: int) -> tuple[Proposal, ...]:
     looking at — and a screen that charges for the back button is a screen people stop
     pressing buttons on.
 
-    ponytail: a module-level dict with a timestamp, exactly like `profile.of`. No
-    eviction, no size bound, no lock. Ceiling: one entry per table for five minutes, in
-    a single-process demo server. The upgrade path is the same one that module names.
-    The key carries the limit as well as the table, so a memo cannot answer a request
-    for eight with a batch of ten somebody asked for first.
+    IT IS ALSO WHAT THE ACCEPT PATH ADDRESSES A PROPOSAL BY, which is the second job it
+    grew (bead dq-8zj). `Batch.handle()` names one row in here, `resolve()` reads it back,
+    and that is what lets a checkbox carry something other than the compiled spec itself.
+    The memo was already the right lifetime for it: the batch the reader is looking at is
+    the batch they are about to accept from.
+
+    ponytail: a module-level dict of `Batch`, exactly like `profile.of`. No eviction, no
+    size bound, no lock. Ceiling: one entry per table for five minutes, in a single-process
+    demo server — and a second process would refuse the first one's handles rather than
+    resolve them wrongly. The upgrade path is the same one that module names. The key
+    carries the limit as well as the table, so a memo cannot answer a request for eight
+    with a batch of ten somebody asked for first.
     """
     memoised = _MEMO.get((table, limit))
-    if memoised is not None and time.monotonic() - memoised[0] < MEMO_SECONDS:
-        return memoised[1]
+    if memoised is not None and memoised.fresh:
+        return memoised
 
     profiled = profile.of(table)
     reply = await model.ask_json(_prompt(profiled, limit), SYSTEM)
-    made = proposals(profiled, reply.data, limit)
-    _MEMO[(table, limit)] = (time.monotonic(), made)
-    return made
+    batch = Batch(
+        id=secrets.token_urlsafe(9),
+        at=time.monotonic(),
+        proposals=proposals(profiled, reply.data, limit),
+    )
+    _MEMO[(table, limit)] = batch
+    return batch
 
 
 def proposals(

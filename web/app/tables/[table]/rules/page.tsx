@@ -3,7 +3,7 @@ import { Rail } from "../../../rail";
 import { chosenRole } from "../../../role";
 import { judge, propose, revise } from "./actions";
 import { AuthorField, Pick, Selection } from "./desk";
-import { ruleToken, specToken } from "./token";
+import { proposalToken, ruleToken } from "./token";
 
 export const metadata = { title: "Rules" };
 
@@ -132,9 +132,9 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
               <ul className="bulk-list">
                 {proposals.map((proposal) => (
                   <Row
-                    key={specToken(proposal)}
+                    key={proposal.handle}
                     table={table}
-                    token={specToken(proposal)}
+                    token={proposalToken(proposal.handle)}
                     item={proposal}
                     copy={desk.copy}
                     proposing={proposing}
