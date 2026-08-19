@@ -1,4 +1,5 @@
 import { read, refused, write, type Proposal, type Rule, type Workbench } from "../../../api";
+import { Rail } from "../../../rail";
 import { chosenRole } from "../../../role";
 import { judge, propose, revise } from "./actions";
 import { AuthorField, Pick, Selection } from "./desk";
@@ -91,6 +92,8 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
 
   return (
     <>
+      <Rail />
+      <div className="railed">
       <div className="screen-head">
         <h1>
           Rules · <code>{table}</code>
@@ -222,6 +225,7 @@ export default async function Page({ params, searchParams }: PageProps<"/tables/
           </ul>
           <div className="catalog-foot">● in use on this table</div>
         </aside>
+      </div>
       </div>
     </>
   );

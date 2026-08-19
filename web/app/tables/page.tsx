@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { read, refused, type Coverage } from "../api";
+import { Rail } from "../rail";
 import { chosenRole } from "../role";
 
 export const metadata = { title: "Tables" };
@@ -45,6 +46,10 @@ export default async function Page() {
   }
   return (
     <>
+      {/* The same payload feeds the rail and the explorer, so the dot beside a name and
+          the bucket the row files under cannot disagree — one read, two renderings. */}
+      <Rail coverage={coverage} />
+      <div className="railed">
       <div className="screen-head">
         <h1>Table Explorer</h1>
         <p className="who">
@@ -122,6 +127,7 @@ export default async function Page() {
           )}
         </section>
       ))}
+      </div>
     </>
   );
 }
