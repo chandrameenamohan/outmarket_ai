@@ -49,12 +49,15 @@ avoid.** First, **`web/.next` is stale until you rebuild it and it fails GREEN**
 serves the last build and says nothing about it, so a whole `-m e2e` pass was taken against code
 that predated the fixes it was checking, and it passed. `find web/app -newer web/.next/BUILD_ID`
 answers it in one line, and it also dissolved a phantom defect the stale build had invented.
-Second, **two concurrent runs of this layer take each other red**: SPEC §7's stack schema is the
-constant `dq_scenario` and the flow DROPS it on the way in, so a second runner drops it under the
-first. Seen as `AssertionError: the store holds 3 rule(s) for orders after a screen of proposals` —
-an assertion that is exactly right and was not loosened — against a `dq_scenario` holding 19 rule
-revisions written by the other process inside the same 100 seconds. §7 alone: **1 passed in
-170.18 s**. Bead `dq-mc0`, open; it is the third instance of the shape §4.7.2 records.
+Second, **two concurrent runs of this layer used to take each other red, and no longer do**: SPEC
+§7's stack schema was the constant `dq_scenario` and the flow DROPS it on the way in, so a second
+runner dropped it under the first. Seen as `AssertionError: the store holds 3 rule(s) for orders
+after a screen of proposals` — an assertion that is exactly right and was not loosened — against a
+`dq_scenario` holding 19 rule revisions written by the other process inside the same 100 seconds.
+**Fixed by bead `dq-mc0`: the schema carries the pid** (`dq_scenario_<pid>`), so a runner is its own
+writer. Two §7 flows launched ~2 s apart, on 2026-08-19, both green — **1 passed in 141.24 s** and
+**1 passed in 133.35 s**, both exit 0 — and §4.7.3 has the schema listing that proves they were in
+different stores. It was the third instance of the shape §4.7.2 records.
 
 **THE EIGHT SKIPS, AND THE STATUS OF THE VISUAL BASELINES, STATED ONCE.** Six of the eight are
 visual-regression states (§4.3) and two are the delivery targets nobody named (§8.1). **No visual
@@ -742,11 +745,17 @@ is faked**: three real model calls, two real runs of `orders`, real Chromium, re
 
 **It boots its own stack.** §7 opens on *"No rules exist"*, the store is append-only (F6), and
 `DQ_SCHEMA` is read from the process environment — so the flow drops and recreates a schema of its
-own (`dq_scenario`), starts an API process on it and a Next process in front of that, on two free
-ports. `tests/e2e/scenario_stack.py` argues it at length. **The reset is idempotent rather than
+own (`dq_scenario_<pid>`), starts an API process on it and a Next process in front of that, on two
+free ports. `tests/e2e/scenario_stack.py` argues it at length. **The reset is idempotent rather than
 self-cleaning:** a second run is never polluted by a first, and what the flow wrote survives so a
 red one can be read. `DROP SCHEMA ... CASCADE` is also the only reset available — both stores refuse
 DELETE and TRUNCATE by trigger, from the owner included.
+
+**The pid in that name is bead `dq-mc0`** and it is what makes two of these flows runnable at once:
+the name was the literal `dq_scenario`, which is one schema for however many runners there are, and
+the way-in drop then took the first runner's store away (§4.7.3). The same way-in drop is the
+cleanup — it sweeps the `dq_scenario_*` schemas whose process is gone, and never one a live run
+owns, since that would be the same collision with an extra step.
 
 Four files, because 400 lines is the file ceiling: the flow (`test_spec_section_7.py`, which asserts
 only the SEAM between steps), the stack, steps 1–6 (`scenario_steps.py`) and the run
@@ -767,12 +776,17 @@ well. Both were restored and both files `diff` clean against their pre-break cop
 The numbers it grades against come from `seed/MANIFEST.md` and never from §7's prose, which still
 quotes 2.4M rows the demo dataset does not have.
 
-### 4.7 The two ways this gate has gone red without anything being broken
+### 4.7 The three ways this gate has gone red without anything being broken
 
-Both were found at close-out on 2026-08-17, both are recorded here rather than in a commit message,
-and both matter for the same reason: **a gate that is green two runs in three is not green.** An
-intermittent red teaches people to re-run rather than to read, which is the one habit the rest of
-this harness exists to prevent.
+The first two were found at close-out on 2026-08-17 and the third at close-out on 2026-08-18; all
+three are recorded here rather than in a commit message, and they matter for the same reason: **a
+gate that is green two runs in three is not green.** An intermittent red teaches people to re-run
+rather than to read, which is the one habit the rest of this harness exists to prevent.
+
+**Two of the three are one shape** — one schema name, two writers, an append-only store — and that
+is the most reusable thing in this section. The discriminator has to come from something the
+colliding parties cannot share, and each instance needed one finer than the last: a marker names a
+LAYER (§4.7.2) and a pid names a PROCESS (§4.7.3).
 
 #### 4.7.1 A read that raced a write (bead `dq-cyi.3`)
 
@@ -874,6 +888,75 @@ append-only store has, and it runs as `dq_system` — which owns these schemas b
 outside `tests/scratch.py` is refused, which is what makes `ARGS=dq` an error. Reset ahead of a full
 run of a layer rather than of one check: `make check-ui` rebuilds what it needs in file order, and
 `conftest.rule_id` fails on an empty store by design.
+
+#### 4.7.3 Two PROCESSES of one layer writing into one scratch schema (bead `dq-mc0`)
+
+**The same shape as §4.7.2, one level finer, and it survived that fix.** SPEC §7's stack schema was
+the constant `dq_scenario` and the flow DROPS it on the way in, because §7 opens on *"No rules
+exist"* (SPEC §7.1). That is exactly right for one runner and wrong for two: a second `make
+check-ui` dropped the schema underneath the first and started writing into it. Found at close-out on
+2026-08-18 by running `-m e2e` while another process was doing the same:
+
+```
+FAILED tests/e2e/test_spec_section_7.py::test_spec_section_7_end_to_end_scenario
+AssertionError: the store holds 3 rule(s) for orders after a screen of proposals.
+Nothing is persisted until somebody accepts it (SPEC F12).
+```
+
+**That assertion is right and was not loosened** — it is F3's whole promise, that a machine proposal
+is not a stored rule. What was wrong was two writers in one schema, and reading `dq_scenario`
+straight afterwards said so: 19 rule revisions and 2 run records written between 12:10:59Z and
+12:12:48Z, a complete §7 lifecycle (proposed → accepted, needs_review, rejected), while this
+process's §7 had aborted at step 2 at ~12:11:00Z. One run cannot produce both. **And it passed
+alone, which is the tell:** `pytest -m e2e tests/e2e/test_spec_section_7.py` → 1 passed in 170.18 s.
+
+**Why `dq-cyi.4`'s fix does not reach it.** That one derives the schema from the markers pytest
+COLLECTED, which is a fact about the layer. Two processes of the same layer collect the same
+markers, so a marker cannot tell them apart. The discriminator has to be a property of the process,
+and the cheapest one that already exists is its pid: `SCENARIO_SCHEMA` is now
+`f"dq_scenario_{os.getpid()}"` (`tests/e2e/scenario_stack.py`). The alternative the bead allowed —
+refusing the second runner by name — was rejected for costing more machinery (a connection held open
+for the whole run to hold a lock) while taking away the concurrency §4.7.2 had just bought.
+
+**The graveyard is swept by the drop that was already there**, so there is no second mechanism and
+no teardown: `_reset_schema` also drops the `dq_scenario_*` schemas whose pid is no longer a live
+process, plus the pre-fix literal `dq_scenario`. It never takes one a live run owns — that would be
+this same bug with an extra step, which is what `_stale_scenario_schemas` exists to refuse.
+**Ceiling, marked `ponytail:` in that function:** liveness is asked LOCALLY against a schema list
+that lives on a shared Supabase, so a run on another machine whose pid happens to be free here could
+be swept. One developer, one laptop today; the upgrade path is a session advisory lock per schema
+(`pg_try_advisory_lock`, held for the run), where a free lock means nobody is using it anywhere.
+
+**Shown, not asserted — two §7 flows launched within ~2 s of each other on 2026-08-19, overlapping
+windows, both green:**
+
+```
+run A   pytest -m e2e tests/e2e/test_spec_section_7.py   1 passed in 141.24s   exit 0
+run B   pytest -m e2e tests/e2e/test_spec_section_7.py   1 passed in 133.35s   exit 0
+```
+
+The schemas afterwards, read straight off `information_schema`, are the other half of the evidence —
+two distinct per-pid stores, and no `dq_scenario`:
+
+```
+['dq', 'dq_check', 'dq_check_ge', 'dq_hostile', 'dq_scenario_33664', 'dq_scenario_33964']
+```
+
+Both survive their own run, which is the documented idempotent-not-self-cleaning behaviour, and the
+next §7 run sweeps them because those two pids are now dead.
+
+**The cheap half is a unit check, so the next regression costs no e2e run to catch.**
+`tests/test_scenario_schema_isolation.py` asserts that the schema is derived from this process
+(`prefix + os.getpid()`, never a literal) and that the sweep returns only the dead-pid schema and
+the legacy literal — leaving this process's own, a live sibling's, `dq_check` and `dq` alone. It
+needs no database and no marker, so it rides in `make check`.
+
+**Still one writer per schema, one level up: two whole `make check-ui` runs at once are NOT green.**
+§7 no longer collides, but the rest of the browser layer shares `dq_check` through one API process,
+and three checks there count rules before and after an action
+(`tests/e2e/test_f12_translation_desk.py`, `test_f12_refused_judgment.py`). That is the same shape a
+fourth time and it is out of `dq-mc0`'s scope by the bead's own words; the acceptance above is
+therefore two §7 flows, which is what the bead asks for.
 
 ---
 
