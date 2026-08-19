@@ -264,6 +264,21 @@ main:has(> .rail) > .railed {
   font-variant-numeric: tabular-nums;
 }
 
+/* The streaming fallback's placeholder bars (rail.tsx::RailSkeleton, bead dq-9do):
+   the page ground on the card surface — the faintest pairing already in the palette,
+   a hint that something is loading rather than a component competing with it. No
+   shimmer: the real rail replaces this in about a second (coverage ~1.6 s warm), and
+   motion would be a new visual idea for a thing whose job is to hold 248px still. */
+.rail .skel-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.rail .skel-line:nth-child(even) {
+  width: 72%;
+}
+
 .dot {
   width: 8px;
   height: 8px;
