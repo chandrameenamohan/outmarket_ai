@@ -60,10 +60,34 @@ NEEDLES = (
 # the check — see `test_every_dynamic_segment_has_something_to_fill_it`.
 FILLING = {"table": "orders", "ruleId": "rule_id", "recordId": "record_id"}
 
-# The one route that renders nothing without a query string: `/runs` is "this table, now"
-# and an address with no table names no table (web/app/runs/page.tsx). Without this it
-# would answer with a paragraph saying so and pass while checking nothing.
-QUERIES = {"/runs": "?table=orders"}
+# The query string a route is fetched WITH, when the bare address is not the state worth
+# checking. Two entries, and they are here for opposite reasons.
+#
+# `/runs` renders nothing without one: it is "this table, now", and an address with no
+# table names no table (web/app/runs/page.tsx). Without this it would answer with a
+# paragraph saying so and pass while checking nothing.
+#
+# `?propose=1` IS THE SCREEN THIS CHECK USED TO MISS, and it is bead dq-8zj. F3's machine
+# proposals have no row in the store, so the checkbox that accepted one carried its whole
+# compiled `{type, kwargs}` as its value — measured off the socket at the time, the domain
+# expert's document held 35 occurrences each of `expect_column` and `kwargs`, and this
+# check was green because it fetched the bare address. The propose screen is a SUPERSET of
+# it: same rules, same rail, plus the proposals, so nothing is lost by fetching this state
+# instead of that one.
+#
+# WHERE THE COST LANDS, DECIDED RATHER THAN DISCOVERED. `?propose=1` is the one URL in the
+# product that spends money — F3 asks the model for candidates (~$0.04, ~6.6 s — LT-2b) —
+# and that is why the route was not in this list to begin with. It joins here, in the `e2e`
+# layer, and NOT in `make check`: the default gate is marker-deselected to be
+# network-free and app-free, so no run of it can bill. Inside a browser-layer run the call
+# is already paid for — `tests/fixtures_f12.py::PROPOSED` is the same URL and three checks
+# already share ONE call through `app/rules/suggest.py`'s five-minute memo, keyed by
+# (table, limit) in the API process. This is the fourth sharer on the same key, so the
+# usual marginal cost is nothing and the worst case, if this check runs first and alone,
+# is one call. The offline half of dq-8zj — that a handle resolves and that an expired or
+# forged one refuses — is `tests/test_proposal_handles.py`, which is free and runs in
+# `make check`.
+QUERIES = {"/runs": "?table=orders", "/tables/[table]/rules": "?propose=1"}
 
 ROLES = ("expert", "engineer")
 

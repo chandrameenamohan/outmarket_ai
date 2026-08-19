@@ -22,7 +22,7 @@ import json
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from app.rules import store
+from app.rules import store, suggest
 
 
 def parse(path: str) -> tuple[tuple[str, ...], dict[str, list[str]]]:
@@ -108,17 +108,34 @@ def batched(parsed: dict[str, Any]) -> tuple[store.Revision, ...]:
     the reason a rejection needs, the validator on each spec. What happens here is only
     shape: a `specs` that is not a list is a caller error and says so, rather than
     reaching `judge_batch` as an empty selection and being refused for the wrong reason.
+
+    THREE POPULATIONS, AND THE THIRD IS THE ONE THAT DOES NOT CARRY ITS OWN RULE (bead
+    dq-8zj). `proposals` is a list of HANDLES — `app/rules/suggest.py`'s batch id and an
+    index into it — and a machine proposal reaches the store through those rather than by
+    posting its compiled spec back, because the spec in the browser was the framework in
+    the domain expert's document (SPEC F12 Rev 0.4). `resolve()` refuses a handle it does
+    not hold, so an expired or forged one is a 422 and not a write; what it returns is a
+    spec this process composed, so it joins `specs` and walks the same validator.
+
+    `specs` STAYS, and it is not the hole coming back: F4's authoring draft still travels
+    as a spec — it is composed on demand and never memoised, so it has no batch to be an
+    index into — and every spec here is revalidated by `store.propose()` on the way in
+    (INV-2). What changed is what the PROPOSAL screen sends, which is what a reader sees.
     """
+    table = required(parsed, "table")
     specs = parsed.get("specs") or []
     rule_ids = parsed.get("rule_ids") or []
-    if not isinstance(specs, list) or not isinstance(rule_ids, list):
+    handles = parsed.get("proposals") or []
+    if not all(isinstance(v, list) for v in (specs, rule_ids, handles)):
         raise ValueError(
-            "a batch judgment carries `specs` (unsaved proposals) and `rule_ids` (stored "
-            f"rules), each a list; got {type(specs).__name__} and {type(rule_ids).__name__}"
+            "a batch judgment carries `specs` (an authored draft), `proposals` (handles for "
+            "unsaved machine proposals) and `rule_ids` (stored rules), each a list; got "
+            f"{type(specs).__name__}, {type(handles).__name__} and {type(rule_ids).__name__}"
         )
+    named = [suggest.resolve(table, str(handle)) for handle in handles]
     return store.judge_batch(
-        required(parsed, "table"),
-        specs,
+        table,
+        [*specs, *({"type": p.type, "kwargs": dict(p.kwargs)} for p in named)],
         [str(rule_id) for rule_id in rule_ids],
         str(parsed.get("status")),
         (parsed.get("reason") or "").strip() or None,

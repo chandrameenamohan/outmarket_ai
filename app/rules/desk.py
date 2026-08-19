@@ -145,17 +145,28 @@ async def proposals(table: str, configuration: bool = False) -> dict[str, Any]:
     somebody accepted five minutes ago with a differently-spelled number. Offering it
     again is not merely noise — accepting it twice writes two rules that check the same
     thing, and coverage then counts a table as better protected than it is.
+
+    A ROW TRAVELS AS A `handle`, NEVER AS THE SPEC IT NAMES (bead dq-8zj). This function
+    used to spread `**spec` into every row, because the checkbox that accepts a proposal
+    had nothing else to identify it by — which put the compiled expectation's own type
+    name and kwargs in the DOMAIN EXPERT's document, on the one screen both users work on,
+    and `web/app/framework.ts`'s key-name filter could not take them out without leaving
+    that reader a checkbox that accepts nothing. The handle is `app/rules/suggest.py`'s
+    batch id and an index into it, resolved back on the way in by `resolve()`; the index
+    is into the WHOLE batch and not into `rendered`, because the loop skips the ones the
+    table already holds. The engineer still gets `configuration` under the flag, so the
+    facing pane is unchanged and only the identity moved.
     """
-    made = await suggest.for_table(table, store.BULK_CAP)
+    batch = await suggest.for_table(table, store.BULK_CAP)
     held = {_key(rev.spec) for rev in store.current(store.revisions(table=table))}
     rendered = []
-    for proposal in made:
+    for index, proposal in enumerate(batch.proposals):
         spec = configuration_of({"type": proposal.type, "kwargs": dict(proposal.kwargs)})
         if _key(spec) in held:
             continue
         rendered.append(
             {
-                **spec,
+                "handle": batch.handle(index),
                 "column": proposal.column,
                 "statement": proposal.statement,
                 "evidence": proposal.evidence,
