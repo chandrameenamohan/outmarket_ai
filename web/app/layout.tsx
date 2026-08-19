@@ -4,6 +4,7 @@ import "./globals.css";
 import { read, refused, type Coverage } from "./api";
 import { chosenRole, bodyClass, selectRole } from "./role";
 import { Tabs } from "./tabs";
+import { Report } from "./report";
 
 export const metadata: Metadata = {
   title: { default: "Data quality assistant", template: "%s · Data quality assistant" },
@@ -80,6 +81,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               </button>
             </span>
           </form>
+          {/* The bug door (bead dq-bba). Last in the header so it is reachable and
+              never in the way; inside the topbar because that is the only place a
+              persistent link is legal (tests/e2e/test_f11_review_queue.py). Its own
+              island for the same reason Tabs is one, and the same Suspense, because
+              it too reads useSearchParams. */}
+          <Suspense fallback={null}>
+            <Report role={role} />
+          </Suspense>
         </header>
         <main>{children}</main>
       </body>
