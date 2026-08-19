@@ -179,9 +179,17 @@ def step_4_the_second_user_acts_independently(
         f"the flagged rule {flagged['statement']!r} is not waiting in the queue, which is the "
         "one place somebody's judgment was asked for."
     )
-    navigation = driver.page.query_selector_all("a[href], nav, select, [role='navigation']")
+    # Narrowed from "no navigation at all" when bead dq-448 restored the mockup's screen
+    # tabs to the topbar: the clause is about a TABLE list, and the tabs name screens.
+    # tests/e2e/test_f11_review_queue.py carries the full argument and the wider set of
+    # assertions; this step keeps §7.4's own line — nothing below the header navigates.
+    navigation = driver.page.evaluate(
+        """() => [...document.querySelectorAll("a[href], nav, select, [role='navigation']")]
+             .filter((e) => !e.closest('header.topbar'))
+             .map((e) => e.outerHTML)"""
+    )
     assert navigation == [], (
-        f"the queue carries navigation: {[e.evaluate('e => e.outerHTML') for e in navigation]}. "
+        f"the queue carries navigation outside the topbar's screen tabs: {navigation}. "
         "F11: a domain expert never encounters a table list, and a table name is a word."
     )
 

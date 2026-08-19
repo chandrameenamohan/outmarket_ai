@@ -105,17 +105,23 @@ def test_the_domain_expert_is_not_sent_through_the_engineers_front_door(
     """
     route = CARRY_AN_ID[0].format(MALFORMED_IDS[0])
 
+    # `main` and not the whole DOM: since bead dq-448 the topbar carries the mockup's
+    # screen tabs for both roles, and the F10 tab is an `/tables` link by definition —
+    # the expert who follows it lands on the signpost, which points them back. What this
+    # check owns is the PAGE's own way out: the not-found body may not walk the expert
+    # into the engineer's door, and must hand the engineer theirs.
     choose_role(driver, "expert")
     driver.goto(route)
-    assert driver.page.query_selector(ENGINEER_DOOR) is None, (
-        f"{route} offers the domain expert {ENGINEER_DOOR}. `/tables` refuses them by name "
-        "(F11), so this page would be sending them from one dead end to the next."
+    assert driver.page.query_selector(f"main {ENGINEER_DOOR}") is None, (
+        f"{route} offers the domain expert {ENGINEER_DOOR} in its body. `/tables` refuses "
+        "them by name (F11), so this page would be sending them from one dead end to the "
+        "next."
     )
 
     choose_role(driver, "engineer")
     driver.goto(route)
-    assert driver.page.query_selector(ENGINEER_DOOR) is not None, (
-        f"{route} offers the engineer no way back to /tables. The link is not merely "
-        "harmless for this reader, it is their front door — a not-found page with nothing "
-        "on it is where a session ends."
+    assert driver.page.query_selector(f"main {ENGINEER_DOOR}") is not None, (
+        f"{route} offers the engineer no way back to /tables in its body. The link is not "
+        "merely harmless for this reader, it is their front door — a not-found page with "
+        "nothing on it is where a session ends."
     )

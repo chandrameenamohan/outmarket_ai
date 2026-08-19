@@ -371,8 +371,50 @@ main:has(> .doorway) {
   padding-bottom: 0;
 }
 
-body:has(.doorway) .role-switch {
+body:has(.doorway) .role-switch,
+body:has(.doorway) .tabs {
   display: none;
+}
+
+/* ====== THE SCREEN TABS — the mockup's own bar, restored by bead dq-448 ======
+   Styles are the mockup's `.tabs` verbatim, retargeted from buttons to links (a tab
+   here navigates, it does not swap a hidden section). The muted `.needs-table` pair
+   is the one addition: F12 and F13 are per-table screens, and a tab with no table in
+   context has nowhere honest to point — see web/app/tabs.tsx. */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tabs a,
+.tabs .needs-table {
+  padding: 17px 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+
+.tabs a:hover {
+  color: var(--ink);
+}
+
+.tabs a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.tabs .fkey {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  margin-right: 5px;
+}
+
+.tabs .needs-table {
+  cursor: not-allowed;
 }
 
 .doorway {

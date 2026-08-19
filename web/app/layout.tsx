@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { chosenRole, bodyClass, selectRole } from "./role";
+import { Tabs } from "./tabs";
 
 export const metadata: Metadata = {
   title: { default: "Data quality assistant", template: "%s · Data quality assistant" },
@@ -53,6 +55,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <span className="glyph">¶ ⇄ {"{ }"}</span>
             <span className="sub">data-quality workbench</span>
           </div>
+          {/* The mockup's screen tabs, restored by the author's call (bead dq-448; the
+              component says what that decision cost and where). Suspense because
+              useSearchParams demands a boundary at build time; the fallback is nothing
+              for the frame of a hard load, and the door hides the bar entirely via the
+              same `body:has(.doorway)` mechanism as the role switch. */}
+          <Suspense fallback={null}>
+            <Tabs />
+          </Suspense>
           <form className="role-switch" action={selectRole}>
             <span className="cap" id="role-caption">
               Viewing as · a view, not an account

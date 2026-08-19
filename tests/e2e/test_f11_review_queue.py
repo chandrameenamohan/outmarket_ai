@@ -62,11 +62,15 @@ def _queue(api_url: str, table: str | None = None) -> dict:
     return queue
 
 
-# Anything that would let a reader NAVIGATE by table, or navigate at all. The point of
-# the set is that it is wider than "a list of tables": F11 says a user reaching this
-# screen never ENCOUNTERS a table list, and a `<select>` of table names, a nav landmark
-# or a link to /tables each puts one in front of them by a different route.
-NAVIGATION = ("a[href]", "nav", "[role='navigation']", "select", "option", "[role='listbox']")
+# Anything that would let a reader NAVIGATE BY TABLE. This set used to be wider — every
+# `a[href]` and `nav` on the page — until bead dq-448 restored the mockup's own screen
+# tabs to the topbar, which are navigation by SCREEN: four fixed labels, no table names,
+# on every screen including this one (design/ux-variant-workbench.html has them on F11
+# too). So the assertion narrowed to SPEC F11's actual clause: a `<select>` of table
+# names, a listbox, any nav or link OUTSIDE the topbar, or a table name rendered as a
+# link each puts a table list in front of the reader by a different route, and each is
+# still forbidden here.
+PICKERS = ("select", "option", "[role='listbox']")
 
 
 def test_review_queue_contains_no_table_list_anywhere(driver, api_url) -> None:
@@ -76,7 +80,11 @@ def test_review_queue_contains_no_table_list_anywhere(driver, api_url) -> None:
     cannot make — a table list pushed below the fold, folded into a `<details>` or
     rendered `display:none` is still a table list a person can meet.
 
-    The second half is the one that actually decays. It is easy to keep a nav out and
+    The one navigation this page may carry is the topbar's screen tabs (bead dq-448,
+    the author's call), and the third assertion holds that bar to what makes it legal:
+    its visible text names screens, never a table.
+
+    The last half is the one that actually decays. It is easy to keep a nav out and
     then render the table name as a link "for convenience", at which point the screen
     has a table list made of one entry per card. So every element whose text is a table
     name is checked for being a link and for SITTING INSIDE one.
@@ -85,13 +93,31 @@ def test_review_queue_contains_no_table_list_anywhere(driver, api_url) -> None:
     driver.goto("/review")
     driver.page.wait_for_load_state("networkidle")
 
-    found = {selector: driver.page.query_selector_all(selector) for selector in NAVIGATION}
+    found = {selector: driver.page.query_selector_all(selector) for selector in PICKERS}
     offenders = {
         s: [e.evaluate("e => e.outerHTML") for e in els] for s, els in found.items() if els
     }
     assert not offenders, (
-        f"the review queue carries navigation: {offenders}. F11's door opens on judgment; "
-        "every decision on it is taken in place, and a table name is a word in a sentence."
+        f"the review queue carries a table picker: {offenders}. F11's door opens on "
+        "judgment; every decision on it is taken in place."
+    )
+
+    strays = driver.page.evaluate(
+        """() => [...document.querySelectorAll("a[href], nav, [role='navigation']")]
+             .filter((e) => !e.closest('header.topbar'))
+             .map((e) => e.outerHTML)"""
+    )
+    assert strays == [], (
+        f"the review queue carries navigation outside the topbar's screen tabs: {strays}. "
+        "The tab bar is the one navigation this page has, and it lives in the header — "
+        "anything below it is a table list waiting to be spelled."
+    )
+
+    bar = driver.page.inner_text("header.topbar")
+    named_in_bar = sorted({item["table"] for item in queue["items"] if item["table"] in bar})
+    assert not named_in_bar, (
+        f"the topbar names tables: {named_in_bar}. The tabs are legal on this screen "
+        "precisely because their text names screens and never tables (SPEC F11)."
     )
 
     tables = sorted({item["table"] for item in queue["items"]})
@@ -190,8 +216,16 @@ def test_table_query_param_scopes_the_queue_without_changing_the_route(driver, a
         f"?table={table} returned decisions about other tables, so the parameter narrows "
         "nothing and the reader is told it does."
     )
-    assert driver.page.query_selector_all("a[href]") == [], (
-        "the scoped queue grew links the unscoped one does not have. Scoping must not be a "
+    # Outside the topbar's screen tabs (bead dq-448) — the same boundary the whole-DOM
+    # check above holds. Scoping DOES feed the bar: with a table in context the F12/F13
+    # tabs come alive, which is the tab bar doing its job, not the queue growing a list.
+    grown = driver.page.evaluate(
+        """() => [...document.querySelectorAll('a[href]')]
+             .filter((e) => !e.closest('header.topbar'))
+             .map((e) => e.outerHTML)"""
+    )
+    assert grown == [], (
+        f"the scoped queue grew links below the header: {grown}. Scoping must not be a "
         "back door for the navigation F11 forbids."
     )
 
