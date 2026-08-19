@@ -274,7 +274,15 @@ def _batch(table: str) -> Any:
             "as a net loss and which breaks the two type expectations outright (SPEC O-2)."
         )
     if table not in _BATCHES:
-        asset = _source().add_table_asset(name=table, table_name=table)
+        # The asset's own connection test (`SELECT 1 FROM <table> LIMIT 1`) runs in
+        # here, so this is the second place a dead database can surface — and it did,
+        # mid-run on the live deployment (GH #21): the raw driver text reached a
+        # domain expert's run page. The framework tests BEFORE it registers, so a
+        # failed add leaves nothing behind and the next request retries cleanly.
+        try:
+            asset = _source().add_table_asset(name=table, table_name=table)
+        except ConnectionError as exc:
+            raise Unavailable.not_answering(DSN_VAR, exc) from exc
         _BATCHES[table] = asset.add_batch_definition_whole_table(name="whole_table")
     return _BATCHES[table].get_batch()
 
@@ -298,6 +306,13 @@ def _source() -> Any:
             _SOURCE = _CONTEXT.data_sources.add_postgres(
                 name="postgres",
                 connection_string=dsn.replace("postgresql://", "postgresql+psycopg2://", 1),
+                # Passed through to `create_engine`. The engine lives as long as the
+                # process and Supabase (or the network between) drops connections that
+                # sit idle, so without the ping the first rule after a quiet spell dies
+                # with "server closed the connection unexpectedly" (GH #21). The ping
+                # costs one round-trip per checkout and replaces the stale connection
+                # instead of handing it to a rule.
+                kwargs={"pool_pre_ping": True},
             )
         except ConnectionError as exc:
             raise Unavailable.not_answering(DSN_VAR, exc) from exc

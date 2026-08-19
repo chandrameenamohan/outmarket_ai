@@ -173,3 +173,62 @@ def test_a_refusal_carries_a_readable_reason_and_no_framework_type() -> None:
             f"{type(exc.value).__name__} escaped the runtime module. Every refusal is "
             "Rejected, or the framework's exception classes become part of our API."
         )
+
+
+@pytest.mark.ge
+def test_a_dead_database_at_batch_time_speaks_the_neutral_sentence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GH #21: the asset's connection test failed mid-run and the driver's own words
+    ("server closed the connection unexpectedly", host, SQL) reached a domain expert's
+    run page. `_batch()` is the second place a dead database surfaces — `_source()`
+    already converted, this one leaked. Both must raise `Unavailable` carrying only
+    the one neutral sentence."""
+    ge = _runtime()
+    from app.db import unreachable  # noqa: PLC0415
+
+    driver_text = (
+        "(psycopg2.OperationalError) server closed the connection unexpectedly "
+        "[SQL: SELECT 1 FROM payments LIMIT %(param_1)s]"
+    )
+
+    def dead_source() -> Any:
+        # The framework's TestConnectionError subclasses builtin ConnectionError —
+        # the module's own docstring stakes INV-3 on that, so the builtin is the
+        # honest stand-in here.
+        raise ConnectionError(driver_text)
+
+    monkeypatch.setattr(ge, "_source", dead_source)
+    monkeypatch.setattr(ge, "_BATCHES", {})
+    with pytest.raises(ge.Unavailable) as dead:
+        ge._batch("payments")
+    assert str(dead.value) == unreachable.NOT_ANSWERING, (
+        "a reader gets the neutral sentence and nothing else; the driver text goes "
+        f"to the log. Got {str(dead.value)!r}"
+    )
+    for needle in ("psycopg2", "OperationalError", "SELECT", "unexpectedly"):
+        assert needle not in str(dead.value), f"driver text {needle!r} escaped to a reader"
+
+
+@pytest.mark.ge
+def test_the_engine_pings_before_it_hands_out_a_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GH #21's other half: the engine lives as long as the process, idle connections
+    get dropped upstream, and without `pool_pre_ping` the first rule after a quiet
+    spell inherits a dead socket. Assert the datasource is built with the ping."""
+    ge = _runtime()
+    seen: dict[str, Any] = {}
+
+    def capture(**kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(ge._CONTEXT.data_sources, "add_postgres", capture)
+    monkeypatch.setattr(ge, "_SOURCE", None)
+    monkeypatch.setenv(ge.DSN_VAR, "postgresql://ping:check@example.invalid:5432/db")
+    ge._source()
+    assert seen.get("kwargs") == {"pool_pre_ping": True}, (
+        "add_postgres must pass pool_pre_ping through to create_engine; without it a "
+        f"stale pooled connection reaches the first rule after idle. Got {seen.get('kwargs')!r}"
+    )
